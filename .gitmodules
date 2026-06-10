@@ -1,0 +1,3 @@
+[submodule "hypermail-mcp"]
+	path = hypermail-mcp
+	url = https://github.com/mateotiedra/hypermail-mcp.git
