@@ -14,6 +14,7 @@ RUN pnpm install --frozen-lockfile && pnpm build && pnpm prune --prod
 
 RUN mkdir -p /scripts
 COPY dist/on-email.mjs /scripts/on-email.mjs
+COPY src/add-outlook-account.mjs /scripts/add-outlook-account.mjs
 
 # ── Provide a default watch config (env vars override) ──
 
