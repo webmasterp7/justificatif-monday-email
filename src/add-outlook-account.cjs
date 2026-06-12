@@ -5,9 +5,11 @@
  * Usage: docker exec -it <container> node /scripts/add-outlook-account.cjs
  *
  * Required env vars in container:
- *   MS_CLIENT_ID      — Azure/Entra ID public client ID
- *   MS_TENANT_ID      — Tenant (default: "common")
  *   HYPERMAIL_MCP_KEY — Encryption key (already set)
+ *
+ * Optional env vars (hypermail-mcp falls back to built-in defaults):
+ *   MS_CLIENT_ID      — Azure/Entra ID public client ID (optional)
+ *   MS_TENANT_ID      — Tenant (default: "common")
  */
 
 const { spawn } = require("node:child_process");
@@ -21,11 +23,6 @@ if (!MCP_KEY) {
   console.error("HYPERMAIL_MCP_KEY is not set in the container");
   process.exit(1);
 }
-if (!MS_CLIENT_ID) {
-  console.error("MS_CLIENT_ID is not set — needed for Azure OAuth.\nAdd it in Dokploy's Environment tab and redeploy.");
-  process.exit(1);
-}
-
 // ── MCP stdio client ──
 
 let msgId = 0;

@@ -1,0 +1,1302 @@
+{
+  "nodes": [
+    {
+      "id": "hypermail_mcp",
+      "label": "Hypermail MCP",
+      "file_type": "document",
+      "source_file": "hypermail-mcp/README.md",
+      "rationale": "Unified email MCP server \u2014 operate any inbox (Outlook, IMAP, Gmail) by passing an email address. The core product.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "justificatif_monday_email",
+      "label": "Justificatif Monday Email",
+      "file_type": "document",
+      "source_file": "DOKPLOY.md",
+      "rationale": "Receives hypermail-mcp EmailFull JSON via webhook and creates a monday.com board row with sender/subject/date metadata.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "dokploy_deployment",
+      "label": "Dokploy Deployment",
+      "file_type": "document",
+      "source_file": "DOKPLOY.md",
+      "rationale": "Dockerfile-only deployment to Dokploy \u2014 no compose file. Everything configured in Dokploy UI with persistent storage mounts.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "email_provider_interface",
+      "label": "EmailProvider Interface",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/providers/types.ts",
+      "rationale": "Core abstraction that all email backends (Outlook, IMAP, Gmail) implement. Defines listEmails, readEmail, sendEmail, etc.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "outlook_provider",
+      "label": "Outlook Provider",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/providers/outlook/index.ts",
+      "rationale": "Microsoft Graph API provider using msal-node device-code OAuth flow.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "imap_provider",
+      "label": "IMAP Provider",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/providers/imap/index.ts",
+      "rationale": "Generic IMAP provider using imapflow + nodemailer.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "gmail_provider",
+      "label": "Gmail Provider",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/providers/gmail/index.ts",
+      "rationale": "Gmail API provider using googleapis with device-code OAuth.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "provider_registry",
+      "label": "Provider Registry",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/providers/registry.ts",
+      "rationale": "Routes account email \u2192 provider. Instantiates all three providers at startup with their respective configs.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "account_store",
+      "label": "Account Store",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/store/account-store.ts",
+      "rationale": "AES-256-GCM encrypted multi-account persistence. Stores OAuth tokens, provider type, and lastSeenIds for dedup.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "crypto_module",
+      "label": "Crypto Module",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/store/crypto.ts",
+      "rationale": "AES-256-GCM encrypt/decrypt with key resolution (env var, file, or auto-generated master.key). Atomic writes prevent corruption.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "watcher_manager",
+      "label": "Watcher Manager",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/watcher/manager.ts",
+      "rationale": "Polls all accounts' inboxes on interval, detects new emails via lastSeenIds (capped at 200), emits via webhook.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "webhook_delivery",
+      "label": "Webhook Delivery",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/watcher/webhook.ts",
+      "rationale": "HTTP POST with exponential backoff retry (baseDelay \u00d7 2^attempt). Posts EmailFull JSON to configured URL.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mcp_server",
+      "label": "MCP Server",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/server.ts",
+      "rationale": "MCP server setup supporting both stdio and HTTP transports with session management.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "tool_registration",
+      "label": "Tool Registration",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/tools/index.ts",
+      "rationale": "Central tool registration hub \u2014 delegates to accounts, browse, folders, organize, compose submodules.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "on_email_handler",
+      "label": "On-Email Handler",
+      "file_type": "code",
+      "source_file": "src/on-email.ts",
+      "rationale": "Receives EmailFull JSON on stdin, creates monday.com board row via GraphQL mutation with sender/subject/date columns.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "monday_com_integration",
+      "label": "Monday.com Integration",
+      "file_type": "document",
+      "source_file": "src/on-email.ts",
+      "rationale": "GraphQL v2 API to monday.com \u2014 creates items on a board with configurable column mappings for sender, email, subject, date.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "device_code_auth",
+      "label": "Device Code Auth",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/providers/outlook/auth.ts",
+      "rationale": "OAuth device-code flow \u2014 user visits URL and enters code, server polls for token. Used by both Outlook and Gmail.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "hypermail_config",
+      "label": "Hypermail Config",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/config.ts",
+      "rationale": "Configuration system with ${VAR} expansion, CLI overrides, env var fallbacks. Validates tool names against KNOWN_TOOLS list.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "read_only_mode",
+      "label": "Read-Only Mode",
+      "file_type": "rationale",
+      "source_file": "hypermail-mcp/README.md",
+      "rationale": "Tools like send_email, archive_email, trash_email, move_email are disabled under --read-only flag for safe assistant surfaces.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "email_watch_system",
+      "label": "Email Watch System",
+      "file_type": "document",
+      "source_file": "hypermail-mcp/README.md",
+      "rationale": "Background poll loop scanning inboxes for new messages, POSTing to webhook URL. Intended for push-based email triage \u2014 downstream agents receive full email content without polling.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "persistent_storage",
+      "label": "Persistent Storage",
+      "file_type": "document",
+      "source_file": "hypermail-mcp/DOKPLOY.md",
+      "rationale": "Bind mount ../files/data \u2192 /data persists encrypted OAuth tokens and lastSeenIds across redeploys.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "http_transport",
+      "label": "HTTP Transport",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/server.ts",
+      "rationale": "Hosted HTTP server mode for MCP \u2014 alternative to stdio, enables remote clients.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "cli_entry",
+      "label": "CLI Entry Point",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/cli.ts",
+      "rationale": "Argument parsing and entry point \u2014 supports --http, --stdio, --read-only, --host, --port flags.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "tool_filtering",
+      "label": "Tool Filtering",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/config.ts",
+      "rationale": "tools.enabled allowlist / tools.disabled blocklist \u2014 lets operators ship minimal agent-facing surfaces.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "inline_images",
+      "label": "Inline Images Handler",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/providers/shared/inline-images.ts",
+      "rationale": "Shared utility for extracting and converting inline images across providers.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "html_markdown_convert",
+      "label": "HTML/Markdown Converter",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/html-to-markdown.ts",
+      "rationale": "Bidirectional conversion between HTML and Markdown for email body formatting.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "browse_tools",
+      "label": "Browse Tools",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/tools/browse.ts",
+      "rationale": "list_emails, search_emails, read_email, read_attachment \u2014 read operations across providers.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "compose_tools",
+      "label": "Compose Tools",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/tools/compose.ts",
+      "rationale": "send_email, draft_email, edit_draft, send_draft, add_attachment \u2014 write operations with format conversion.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "account_tools",
+      "label": "Account Tools",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/tools/accounts.ts",
+      "rationale": "list_accounts, add_account, complete_add_account, remove_account, get/set_account_settings.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "folder_tools",
+      "label": "Folder Tools",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/tools/folders.ts",
+      "rationale": "list_folders, create_folder, delete_folder, rename_folder \u2014 folder management across providers.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "organize_tools",
+      "label": "Organize Tools",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/tools/organize.ts",
+      "rationale": "archive_email, trash_email, move_email, mark_read, mark_unread \u2014 email lifecycle operations.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "gmail_read_ops",
+      "label": "Gmail Read Ops",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/providers/gmail/read-ops.ts",
+      "rationale": "Gmail-specific list/search/read implementations.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "gmail_write_ops",
+      "label": "Gmail Write Ops",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/providers/gmail/write-ops.ts",
+      "rationale": "Gmail-specific send/draft/move/delete implementations.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "imap_read_ops",
+      "label": "IMAP Read Ops",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/providers/imap/read-ops.ts",
+      "rationale": "IMAP-specific list/search/read via imapflow.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "imap_write_ops",
+      "label": "IMAP Write Ops",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/providers/imap/write-ops.ts",
+      "rationale": "IMAP-specific send/move/delete via nodemailer + imapflow.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "gmail_client",
+      "label": "Gmail API Client",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/providers/gmail/client.ts",
+      "rationale": "googleapis Gmail client factory with token refresh.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "outlook_client",
+      "label": "Outlook Graph Client",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/providers/outlook/client.ts",
+      "rationale": "@microsoft/microsoft-graph-client factory with token refresh.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "imap_client",
+      "label": "IMAP Client",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/providers/imap/client.ts",
+      "rationale": "imapflow client factory with connection management.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "gmail_helpers",
+      "label": "Gmail Helpers",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/providers/gmail/helpers.ts",
+      "rationale": "Gmail message parsing, header extraction, attachment handling.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "imap_helpers",
+      "label": "IMAP Helpers",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/providers/imap/helpers.ts",
+      "rationale": "IMAP message parsing, envelope extraction, MIME handling.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "docker_deployment",
+      "label": "Docker Deployment",
+      "file_type": "document",
+      "source_file": "hypermail-mcp/docs/hosting.md",
+      "rationale": "node:20-slim based Docker image with npm global install, exposes port 3000 for HTTP mode.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "outlook_auth",
+      "label": "Outlook OAuth Auth",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/providers/outlook/auth.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "gmail_auth",
+      "label": "Gmail OAuth Auth",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/providers/gmail/auth.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "shared_tool_helpers",
+      "label": "Shared Tool Helpers",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/tools/shared.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "markdown_to_html",
+      "label": "Markdown to HTML",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/markdown-to-html.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "html_to_markdown",
+      "label": "HTML to Markdown",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/src/html-to-markdown.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "hypermail_config_json",
+      "label": "Hypermail Config JSON",
+      "file_type": "code",
+      "source_file": "hypermail-mcp/hypermail-config.json",
+      "rationale": "JSON config file with http, dataDir, tools, providers, watch sections. Resolved at startup with ${VAR} expansion.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "npm_publish_workflow",
+      "label": "NPM Publish Workflow",
+      "file_type": "document",
+      "source_file": "hypermail-mcp/.pi/prompts/updatenpm.md",
+      "rationale": "Bump version, build, test, publish to npm registry workflow.",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "hypermail_mcp",
+      "target": "email_provider_interface",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/README.md",
+      "weight": 1.0
+    },
+    {
+      "source": "hypermail_mcp",
+      "target": "provider_registry",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/README.md",
+      "weight": 1.0
+    },
+    {
+      "source": "hypermail_mcp",
+      "target": "mcp_server",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/README.md",
+      "weight": 1.0
+    },
+    {
+      "source": "hypermail_mcp",
+      "target": "tool_registration",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/README.md",
+      "weight": 1.0
+    },
+    {
+      "source": "provider_registry",
+      "target": "outlook_provider",
+      "relation": "uses",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/providers/registry.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "provider_registry",
+      "target": "imap_provider",
+      "relation": "uses",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/providers/registry.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "provider_registry",
+      "target": "gmail_provider",
+      "relation": "uses",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/providers/registry.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "provider_registry",
+      "target": "account_store",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/providers/registry.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "outlook_provider",
+      "target": "email_provider_interface",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/providers/outlook/index.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "imap_provider",
+      "target": "email_provider_interface",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/providers/imap/index.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "gmail_provider",
+      "target": "email_provider_interface",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/providers/gmail/index.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "account_store",
+      "target": "crypto_module",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/store/account-store.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "watcher_manager",
+      "target": "webhook_delivery",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/watcher/manager.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "watcher_manager",
+      "target": "provider_registry",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/watcher/manager.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "watcher_manager",
+      "target": "account_store",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/watcher/manager.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "justificatif_monday_email",
+      "target": "webhook_delivery",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "DOKPLOY.md",
+      "weight": 1.0
+    },
+    {
+      "source": "on_email_handler",
+      "target": "monday_com_integration",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/on-email.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "mcp_server",
+      "target": "http_transport",
+      "relation": "uses",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/server.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "mcp_server",
+      "target": "tool_registration",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/server.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "cli_entry",
+      "target": "mcp_server",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/cli.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "cli_entry",
+      "target": "hypermail_config",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/cli.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "hypermail_config",
+      "target": "tool_filtering",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/config.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "outlook_provider",
+      "target": "device_code_auth",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/providers/outlook/auth.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "gmail_provider",
+      "target": "device_code_auth",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "hypermail-mcp/src/providers/gmail/auth.ts",
+      "weight": 0.85
+    },
+    {
+      "source": "dokploy_deployment",
+      "target": "persistent_storage",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "DOKPLOY.md",
+      "weight": 1.0
+    },
+    {
+      "source": "email_watch_system",
+      "target": "watcher_manager",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/README.md",
+      "weight": 1.0
+    },
+    {
+      "source": "email_watch_system",
+      "target": "webhook_delivery",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/README.md",
+      "weight": 1.0
+    },
+    {
+      "source": "justificatif_monday_email",
+      "target": "on_email_handler",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "DOKPLOY.md",
+      "weight": 1.0
+    },
+    {
+      "source": "on_email_handler",
+      "target": "webhook_delivery",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "src/on-email.ts",
+      "weight": 0.9
+    },
+    {
+      "source": "outlook_provider",
+      "target": "imap_provider",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "hypermail-mcp/src/providers/types.ts",
+      "weight": 0.8
+    },
+    {
+      "source": "outlook_provider",
+      "target": "gmail_provider",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "hypermail-mcp/src/providers/types.ts",
+      "weight": 0.8
+    },
+    {
+      "source": "imap_provider",
+      "target": "gmail_provider",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "hypermail-mcp/src/providers/types.ts",
+      "weight": 0.85
+    },
+    {
+      "source": "read_only_mode",
+      "target": "tool_filtering",
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "hypermail-mcp/README.md",
+      "weight": 0.85
+    },
+    {
+      "source": "hypermail_mcp",
+      "target": "dokploy_deployment",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/DOKPLOY.md",
+      "weight": 1.0
+    },
+    {
+      "source": "justificatif_monday_email",
+      "target": "dokploy_deployment",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "DOKPLOY.md",
+      "weight": 1.0
+    },
+    {
+      "source": "tool_registration",
+      "target": "browse_tools",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/tools/index.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "tool_registration",
+      "target": "compose_tools",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/tools/index.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "tool_registration",
+      "target": "account_tools",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/tools/index.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "tool_registration",
+      "target": "folder_tools",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/tools/index.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "tool_registration",
+      "target": "organize_tools",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/tools/index.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "gmail_provider",
+      "target": "gmail_read_ops",
+      "relation": "uses",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/providers/gmail/index.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "gmail_provider",
+      "target": "gmail_write_ops",
+      "relation": "uses",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/providers/gmail/index.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "gmail_read_ops",
+      "target": "gmail_client",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/providers/gmail/read-ops.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "gmail_write_ops",
+      "target": "gmail_client",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/providers/gmail/write-ops.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "gmail_read_ops",
+      "target": "gmail_helpers",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/providers/gmail/read-ops.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "imap_provider",
+      "target": "imap_read_ops",
+      "relation": "uses",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/providers/imap/index.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "imap_provider",
+      "target": "imap_write_ops",
+      "relation": "uses",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/providers/imap/index.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "imap_read_ops",
+      "target": "imap_client",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/providers/imap/read-ops.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "imap_write_ops",
+      "target": "imap_client",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/providers/imap/write-ops.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "imap_read_ops",
+      "target": "imap_helpers",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/providers/imap/read-ops.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "outlook_client",
+      "target": "outlook_provider",
+      "relation": "depends_on",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "hypermail-mcp/src/providers/outlook/client.ts",
+      "weight": 0.85
+    },
+    {
+      "source": "gmail_read_ops",
+      "target": "imap_read_ops",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "hypermail-mcp/src/providers/types.ts",
+      "weight": 0.85
+    },
+    {
+      "source": "gmail_write_ops",
+      "target": "imap_write_ops",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "hypermail-mcp/src/providers/types.ts",
+      "weight": 0.85
+    },
+    {
+      "source": "gmail_helpers",
+      "target": "imap_helpers",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "hypermail-mcp/src/providers/types.ts",
+      "weight": 0.8
+    },
+    {
+      "source": "gmail_client",
+      "target": "outlook_client",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "hypermail-mcp/src/providers/types.ts",
+      "weight": 0.8
+    },
+    {
+      "source": "gmail_client",
+      "target": "imap_client",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "hypermail-mcp/src/providers/types.ts",
+      "weight": 0.75
+    },
+    {
+      "source": "browse_tools",
+      "target": "organize_tools",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.7,
+      "source_file": "hypermail-mcp/README.md",
+      "weight": 0.7
+    },
+    {
+      "source": "compose_tools",
+      "target": "organize_tools",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.7,
+      "source_file": "hypermail-mcp/README.md",
+      "weight": 0.7
+    },
+    {
+      "source": "dokploy_deployment",
+      "target": "docker_deployment",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/docs/hosting.md",
+      "weight": 1.0
+    },
+    {
+      "source": "outlook_provider",
+      "target": "outlook_auth",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/providers/outlook/index.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "gmail_provider",
+      "target": "gmail_auth",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/providers/gmail/index.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "outlook_auth",
+      "target": "gmail_auth",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "hypermail-mcp/src/providers/types.ts",
+      "weight": 0.85
+    },
+    {
+      "source": "outlook_auth",
+      "target": "device_code_auth",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/providers/outlook/auth.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "gmail_auth",
+      "target": "device_code_auth",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "hypermail-mcp/src/providers/gmail/auth.ts",
+      "weight": 0.85
+    },
+    {
+      "source": "compose_tools",
+      "target": "shared_tool_helpers",
+      "relation": "depends_on",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "hypermail-mcp/src/tools/compose.ts",
+      "weight": 0.8
+    },
+    {
+      "source": "compose_tools",
+      "target": "markdown_to_html",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/tools/compose.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "browse_tools",
+      "target": "html_to_markdown",
+      "relation": "depends_on",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "hypermail-mcp/src/tools/browse.ts",
+      "weight": 0.8
+    },
+    {
+      "source": "markdown_to_html",
+      "target": "html_to_markdown",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "hypermail-mcp/src/html-to-markdown.ts",
+      "weight": 0.9
+    },
+    {
+      "source": "hypermail_config",
+      "target": "hypermail_config_json",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/src/config.ts",
+      "weight": 1.0
+    },
+    {
+      "source": "hypermail_mcp",
+      "target": "npm_publish_workflow",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hypermail-mcp/.pi/prompts/updatenpm.md",
+      "weight": 1.0
+    },
+    {
+      "source": "outlook_auth",
+      "target": "crypto_module",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.7,
+      "source_file": "hypermail-mcp/src/store/crypto.ts",
+      "weight": 0.7
+    },
+    {
+      "source": "gmail_auth",
+      "target": "crypto_module",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.7,
+      "source_file": "hypermail-mcp/src/store/crypto.ts",
+      "weight": 0.7
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "provider_abstraction_layer",
+      "label": "Provider Abstraction Layer",
+      "nodes": [
+        "email_provider_interface",
+        "outlook_provider",
+        "imap_provider",
+        "gmail_provider",
+        "provider_registry"
+      ],
+      "relation": "implement",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": "hypermail-mcp/src/providers/types.ts"
+    },
+    {
+      "id": "email_watch_pipeline",
+      "label": "Email Watch Pipeline",
+      "nodes": [
+        "email_watch_system",
+        "watcher_manager",
+        "webhook_delivery",
+        "on_email_handler",
+        "monday_com_integration"
+      ],
+      "relation": "form",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "hypermail-mcp/README.md"
+    },
+    {
+      "id": "credential_security_stack",
+      "label": "Credential Security Stack",
+      "nodes": [
+        "account_store",
+        "crypto_module",
+        "device_code_auth"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.9,
+      "source_file": "hypermail-mcp/src/store/crypto.ts"
+    },
+    {
+      "id": "mcp_tool_suite",
+      "label": "MCP Tool Suite",
+      "nodes": [
+        "tool_registration",
+        "browse_tools",
+        "compose_tools",
+        "account_tools",
+        "folder_tools",
+        "organize_tools"
+      ],
+      "relation": "form",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": "hypermail-mcp/src/tools/index.ts"
+    },
+    {
+      "id": "read_write_ops_pattern",
+      "label": "Read/Write Ops Pattern",
+      "nodes": [
+        "gmail_read_ops",
+        "gmail_write_ops",
+        "imap_read_ops",
+        "imap_write_ops"
+      ],
+      "relation": "implement",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "hypermail-mcp/src/providers/types.ts"
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}
