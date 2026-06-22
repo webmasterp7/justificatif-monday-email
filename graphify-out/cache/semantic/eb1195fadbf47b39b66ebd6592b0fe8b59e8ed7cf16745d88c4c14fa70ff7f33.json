@@ -1,1 +1,0 @@
-{"nodes": [{"id": "gmail_helpers", "label": "Gmail Helpers", "file_type": "code", "source_file": "hypermail-mcp/src/providers/gmail/helpers.ts", "rationale": "Gmail message parsing, header extraction, attachment handling.", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}

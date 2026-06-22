@@ -1,9 +1,0 @@
-{
-  "watch": {
-    "enabled": true,
-    "pollIntervalSeconds": 60,
-    "script": {
-      "path": "/scripts/on-email.mjs"
-    }
-  }
-}
