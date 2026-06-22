@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "monday-api-mcp": {
+      "command": "sh",
+      "args": [
+        "-lc",
+        "exec npx -y @mondaydotcomorg/monday-api-mcp@latest -t \"$P7_MONDAY_API_TOKEN\""
+      ]
+    }
+  }
+}
