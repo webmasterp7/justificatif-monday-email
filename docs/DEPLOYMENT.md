@@ -33,7 +33,7 @@ Required board columns:
 | Date de Paiement | `date_mm1ca3zv` | date | Extracted payment date when present. |
 | Reference Facture | `text_mm1g3ajw` | text | Extracted invoice/reference number. |
 | Montant Facture | `numeric_mm1chk67` | numbers | Extracted invoice amount. |
-| Notes Particulières | `long_text_mm38snee` | long_text | Email summary and processing notes. |
+| Notes Particulières | `long_text_mm38snee` | long_text | Email-automation provenance marker, source email link, email summary, and processing notes. |
 | Soumis par | `text_mm3seznv` | text | Sender name/email. |
 | Type de facture | `dropdown_mm3sz6mp` | dropdown | `Factures` or `Carte`. |
 
@@ -42,12 +42,14 @@ Every created item also receives a monday.com update summarizing:
 - What was added.
 - Receipt/invoice reference and amount when available.
 - Who submitted it.
-- Source email subject and received date.
+- Source email subject, received date, and source email link.
 - Attached file names.
 - OCR/classification confidence and grouping explanation.
 - Review/error warnings when relevant.
 
-Review/error items use the same board. Because no dedicated status column was provided, they are represented by `[REVUE]` item-name prefixes, `Notes Particulières`, and detailed updates.
+Created items are identifiable as email-automation-created through `Notes Particulières` (including source email link) and the detailed item update (including the link).
+
+Review/error items use the same board. Because no dedicated status column was provided, they are represented by `[INCOMPLET]` item-name prefixes, `Notes Particulières` (including the source email link), and detailed updates (including the link).
 
 ## 3. Dokploy environment variables
 

@@ -9,6 +9,7 @@ export interface EmailMessage {
   id: string;
   subject: string;
   receivedDateTime: string;
+  webLink: string;
   sender: EmailSender;
   bodyText?: string;
   hasAttachments: boolean;

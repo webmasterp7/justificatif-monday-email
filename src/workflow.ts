@@ -1,4 +1,5 @@
 import { filterReceiptAttachments } from './attachments.js';
+import { applyInvoiceTypeEvidence } from './invoiceTypeEvidence.js';
 import type { AppConfig } from './config.js';
 import type { GraphMailClient } from './clients/graph.js';
 import type { MistralReceiptClient } from './clients/mistral.js';
@@ -9,6 +10,7 @@ import {
   buildReviewUpdateBody,
   buildUpdateBody,
   toDateOnly,
+  withEmailAutomationNote,
 } from './mondayPayload.js';
 import type { AcceptedAttachment, ClassificationResult, EmailAttachment, EmailMessage, ReceiptGroup } from './types.js';
 
@@ -76,8 +78,19 @@ export class ReceiptWorkflow {
         ocrDocuments,
         confidenceThreshold: this.config.workflow.autoCreateConfidenceThreshold,
       });
+      const invoiceTypeResult =
+        classification.decision === 'create_items'
+          ? applyInvoiceTypeEvidence({ email: message, ocrDocuments, groups: classification.receiptGroups })
+          : { groups: classification.receiptGroups };
+
+      if (invoiceTypeResult.reviewReason) {
+        await this.routeToReview(message, attachments, invoiceTypeResult.reviewReason, folders.reviewFolderId);
+        return;
+      }
+
+      const refinedClassification = { ...classification, receiptGroups: invoiceTypeResult.groups };
       const reviewReason = getReviewReason(
-        classification,
+        refinedClassification,
         acceptedAttachments,
         this.config.workflow.autoCreateConfidenceThreshold,
       );
@@ -89,7 +102,7 @@ export class ReceiptWorkflow {
 
       const createdSuccessfully = await this.createReceiptItems(
         message,
-        classification.receiptGroups,
+        refinedClassification.receiptGroups,
         acceptedAttachments,
         folders.reviewFolderId,
       );
@@ -184,10 +197,10 @@ export class ReceiptWorkflow {
     reviewFolderId: string,
   ): Promise<void> {
     const item = await this.monday.createItem({
-      itemName: `[REVUE] ${message.subject || message.id}`,
+      itemName: `[INCOMPLET] ${message.subject || message.id}`,
       columnValues: {
         dateReception: toDateOnly(message.receivedDateTime),
-        notesParticulieres: `Revue requise: ${reason}\n\n${message.bodyText ?? ''}`.slice(0, 2000),
+        notesParticulieres: withEmailAutomationNote(`Revue requise: ${reason}\n\n${message.bodyText ?? ''}`, message.webLink).slice(0, 2000),
         soumisPar: message.sender.name || message.sender.email,
         typeDeFacture: 'Factures',
       },

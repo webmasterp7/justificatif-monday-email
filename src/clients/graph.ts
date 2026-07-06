@@ -5,6 +5,7 @@ interface GraphMessageResponse {
   id: string;
   subject?: string;
   receivedDateTime?: string;
+  webLink?: string;
   hasAttachments?: boolean;
   body?: { content?: string; contentType?: string };
   from?: { emailAddress?: { name?: string; address?: string } };
@@ -76,7 +77,7 @@ export class GraphMailClient {
     const params = new URLSearchParams({
       '$top': String(top),
       '$orderby': 'receivedDateTime asc',
-      '$select': 'id,subject,receivedDateTime,from,sender,body,hasAttachments',
+      '$select': 'id,subject,receivedDateTime,webLink,from,sender,body,hasAttachments',
     });
 
     const response = await this.graphGet<GraphCollection<GraphMessageResponse>>(
@@ -150,13 +151,19 @@ export class GraphMailClient {
   }
 }
 
-function toEmailMessage(message: GraphMessageResponse): EmailMessage {
+export function toEmailMessage(message: GraphMessageResponse): EmailMessage {
   const sender = message.from?.emailAddress ?? message.sender?.emailAddress ?? {};
+  const webLink = message.webLink?.trim();
+
+  if (!webLink) {
+    throw new Error(`Microsoft Graph message ${message.id} did not include webLink`);
+  }
 
   return {
     id: message.id,
     subject: message.subject ?? '',
     receivedDateTime: message.receivedDateTime ?? new Date().toISOString(),
+    webLink,
     hasAttachments: message.hasAttachments ?? false,
     bodyText: stripHtml(message.body?.content ?? ''),
     sender: {

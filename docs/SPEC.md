@@ -131,7 +131,7 @@ For each normal receipt group:
 - `Date de Paiement`: `datePaiement` when present.
 - `Reference Facture`: `referenceFacture` when present.
 - `Montant Facture`: `montantFacture` when present.
-- `Notes Particulières`: `notesParticulieres` or the email summary.
+- `Notes Particulières`: email-automation provenance marker, source email link (`Lien email: ...`), and `notesParticulieres` or the email summary.
 - `Soumis par`: sender display name, falling back to sender email.
 - `Type de facture`: dropdown label from `typeDeFacture`.
 - `Facture`: uploaded after item creation via `add_file_to_column`.
@@ -141,7 +141,7 @@ Then add an item update summarizing:
 - What was added.
 - For which receipt/invoice/reference/amount.
 - Who submitted it.
-- Source email subject and received date.
+- Source email subject, received date, and source email web link.
 - Attached filenames.
 - Grouping explanation and confidence.
 - Any omitted fields or warnings.
@@ -150,9 +150,9 @@ Then add an item update summarizing:
 
 The provided column list has no dedicated status column. For the MVP, Error/Review cases are represented in the same board by:
 
-- Item name prefixed with `[ERREUR]` or `[REVUE]`.
+- Item name prefixed with `[INCOMPLET]`.
 - `Date de Réception` from the source email when available.
-- `Notes Particulières` containing the error/review reason and email summary.
+- `Notes Particulières` containing the email-automation provenance marker, source email link (`Lien email: ...`), error/review reason, and email summary.
 - `Soumis par` populated from the sender.
 - `Type de facture` set to `Factures` by default only to satisfy dropdown requirements if monday requires a value.
 - A monday update containing the detailed reason, source context, attachment list, and next action.

@@ -1,6 +1,12 @@
 import { MONDAY_COLUMNS } from './config.js';
 import type { EmailMessage, MondayColumnValues, ReceiptGroup } from './types.js';
 
+export const EMAIL_AUTOMATION_NOTE = 'Ajouté automatiquement par l’automatisation email.';
+
+export function withEmailAutomationNote(notes: string, webLink: string): string {
+  return [EMAIL_AUTOMATION_NOTE, `Lien email: ${webLink}`, notes].filter(Boolean).join('\n\n');
+}
+
 export function buildMondayColumnValues(values: MondayColumnValues): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     [MONDAY_COLUMNS.dateReception]: { date: values.dateReception },
@@ -30,7 +36,7 @@ export function buildColumnValuesForReceipt(email: EmailMessage, group: ReceiptG
     datePaiement: group.datePaiement,
     referenceFacture: group.referenceFacture,
     montantFacture: group.montantFacture,
-    notesParticulieres: group.notesParticulieres,
+    notesParticulieres: withEmailAutomationNote(group.notesParticulieres, email.webLink),
     soumisPar: email.sender.name || email.sender.email,
     typeDeFacture: group.typeDeFacture,
   };
@@ -53,6 +59,7 @@ export function buildUpdateBody(input: {
     `<li>Soumis par: ${escapeHtml(input.email.sender.name || input.email.sender.email)}</li>`,
     `<li>Date de réception: ${escapeHtml(toDateOnly(input.email.receivedDateTime))}</li>`,
     `<li>Facture: ${escapeHtml(input.group.itemName)}${reference}${amount}</li>`,
+    `<li>Lien email: <a href="${escapeHtml(input.email.webLink)}">${escapeHtml(input.email.webLink)}</a></li>`,
     `<li>Fichiers ajoutés: ${escapeHtml(input.attachmentNames.join(', ') || 'aucun')}</li>`,
     `<li>Confiance: ${Math.round(input.group.confidence * 100)}%</li>`,
     `<li>Regroupement: ${escapeHtml(input.group.groupingExplanation)}</li>`,
@@ -75,6 +82,7 @@ export function buildReviewUpdateBody(input: {
     `<li>Objet email: ${escapeHtml(input.email.subject || '(sans objet)')}</li>`,
     `<li>Soumis par: ${escapeHtml(input.email.sender.name || input.email.sender.email)}</li>`,
     `<li>Date de réception: ${escapeHtml(toDateOnly(input.email.receivedDateTime))}</li>`,
+    `<li>Lien email: <a href="${escapeHtml(input.email.webLink)}">${escapeHtml(input.email.webLink)}</a></li>`,
     `<li>Fichiers: ${escapeHtml(input.attachmentNames.join(', ') || 'aucun')}</li>`,
     '</ul>',
   ].join('');

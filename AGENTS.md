@@ -46,7 +46,7 @@ The MVP uses these fixed column IDs:
 | Soumis par | `text_mm3seznv` | text | Sender name/email |
 | Type de facture | `dropdown_mm3sz6mp` | dropdown | `Factures` or `Carte` |
 
-There is no dedicated status column in the current schema. Review/error items are represented in the same board by `[REVUE]` item-name prefixes, `Notes Particulières`, and a detailed item update.
+There is no dedicated status column in the current schema. Review/error items are represented in the same board by `[INCOMPLET]` item-name prefixes, `Notes Particulières`, and a detailed item update.
 
 ## Important files
 

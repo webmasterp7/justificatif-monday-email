@@ -44,7 +44,7 @@ export class MondayClient {
     const variables = {
       boardId: this.config.boardId,
       groupId: this.config.groupId,
-      itemName: request.itemName,
+      itemName: withDevelopmentPrefix(request.itemName),
       columnValues: JSON.stringify(buildMondayColumnValues(request.columnValues)),
     };
 
@@ -104,7 +104,8 @@ export class MondayClient {
     ) as ArrayBuffer;
 
     form.append('query', query);
-    form.append('variables[file]', new Blob([fileBytes], { type: request.contentType ?? 'application/octet-stream' }), request.fileName);
+    form.append('map', JSON.stringify({ file: 'variables.file' }));
+    form.append('file', new Blob([fileBytes], { type: request.contentType ?? 'application/octet-stream' }), request.fileName);
 
     const response = await fetch('https://api.monday.com/v2/file', {
       method: 'POST',
@@ -143,6 +144,14 @@ export class MondayClient {
 
     return json.data;
   }
+}
+
+function withDevelopmentPrefix(itemName: string): string {
+  if (process.env.NODE_ENV !== 'development' || itemName.startsWith('Test -')) {
+    return itemName;
+  }
+
+  return `Test - ${itemName}`;
 }
 
 function formatErrors(response: GraphQlResponse<unknown>): string {

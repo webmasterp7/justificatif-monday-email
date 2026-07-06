@@ -4,8 +4,9 @@ import type { GraphMailClient } from '../src/clients/graph.js';
 import type { MistralReceiptClient } from '../src/clients/mistral.js';
 import type { MondayClient } from '../src/clients/monday.js';
 import { createLogger } from '../src/logger.js';
+import { EMAIL_AUTOMATION_NOTE } from '../src/mondayPayload.js';
 import { ReceiptWorkflow } from '../src/workflow.js';
-import type { AcceptedAttachment, EmailMessage } from '../src/types.js';
+import type { AcceptedAttachment, EmailMessage, InvoiceType } from '../src/types.js';
 
 const config: AppConfig = {
   microsoft: {
@@ -46,6 +47,7 @@ const email: EmailMessage = {
   id: 'message-1',
   subject: 'Receipt email',
   receivedDateTime: '2026-06-22T12:00:00Z',
+  webLink: 'https://outlook.office.com/mail/message-1',
   sender: { name: 'Alice', email: 'alice@example.com' },
   bodyText: 'Please find receipt attached.',
   hasAttachments: true,
@@ -63,7 +65,9 @@ const attachment: AcceptedAttachment = {
 function makeMocks(overrides: {
   attachments?: unknown[];
   classificationDecision?: 'create_items' | 'review';
+  classificationType?: InvoiceType;
   groupConfidence?: number;
+  ocrMarkdown?: string;
   uploadRejects?: boolean;
 } = {}) {
   const graph = {
@@ -75,7 +79,7 @@ function makeMocks(overrides: {
     ocrAttachment: vi.fn().mockResolvedValue({
       attachmentId: attachment.id,
       fileName: attachment.name,
-      markdown: 'Receipt total 10 EUR',
+      markdown: overrides.ocrMarkdown ?? 'Receipt total 10 EUR',
       pageCount: 1,
     }),
     classifyReceipts: vi.fn().mockResolvedValue({
@@ -92,7 +96,7 @@ function makeMocks(overrides: {
           referenceFacture: 'INV-1',
           montantFacture: 10,
           datePaiement: '2026-06-22',
-          typeDeFacture: 'Factures',
+          typeDeFacture: overrides.classificationType ?? 'Factures',
           notesParticulieres: 'Receipt email summary',
         },
       ],
@@ -127,11 +131,70 @@ describe('ReceiptWorkflow', () => {
     await workflow.processMessage(email, { processedFolderId: 'processed-folder', reviewFolderId: 'review-folder' });
 
     expect(mocks.monday.createItem).toHaveBeenCalledWith(
-      expect.objectContaining({ itemName: 'Merchant receipt' }),
+      expect.objectContaining({
+        itemName: 'Merchant receipt',
+        columnValues: expect.objectContaining({
+          notesParticulieres: expect.stringContaining(EMAIL_AUTOMATION_NOTE),
+        }),
+      }),
+    );
+    expect(mocks.monday.createItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        itemName: 'Merchant receipt',
+        columnValues: expect.objectContaining({
+          notesParticulieres: expect.stringContaining('Lien email: https://outlook.office.com/mail/message-1'),
+        }),
+      }),
     );
     expect(mocks.monday.uploadFile).toHaveBeenCalledWith(expect.objectContaining({ itemId: 'item-1' }));
     expect(mocks.monday.createUpdate).toHaveBeenCalled();
     expect(mocks.graph.moveMessage).toHaveBeenCalledWith(email.id, 'processed-folder');
+  });
+
+  it('sets Type de facture to Carte when OCR shows card payment', async () => {
+    const mocks = makeMocks({
+      classificationType: 'Factures',
+      ocrMarkdown: 'Ticket payé par carte bancaire Visa. Paiement accepté.',
+    });
+    const workflow = makeWorkflow(mocks);
+
+    await workflow.processMessage(email, { processedFolderId: 'processed-folder', reviewFolderId: 'review-folder' });
+
+    expect(mocks.monday.createItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        columnValues: expect.objectContaining({ typeDeFacture: 'Carte' }),
+      }),
+    );
+  });
+
+  it('sets Type de facture to Carte when email body shows card payment', async () => {
+    const mocks = makeMocks({ classificationType: 'Factures' });
+    const workflow = makeWorkflow(mocks);
+    const cardEmail = { ...email, bodyText: 'Ce justificatif a été payé par carte bancaire.' };
+
+    await workflow.processMessage(cardEmail, { processedFolderId: 'processed-folder', reviewFolderId: 'review-folder' });
+
+    expect(mocks.monday.createItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        columnValues: expect.objectContaining({ typeDeFacture: 'Carte' }),
+      }),
+    );
+  });
+
+  it('sets Type de facture to Factures when OCR shows QR or IBAN payment instructions', async () => {
+    const mocks = makeMocks({
+      classificationType: 'Carte',
+      ocrMarkdown: 'Facture QR avec IBAN CH93 0076 2011 6238 5295 7. Montant à payer sous 30 jours.',
+    });
+    const workflow = makeWorkflow(mocks);
+
+    await workflow.processMessage(email, { processedFolderId: 'processed-folder', reviewFolderId: 'review-folder' });
+
+    expect(mocks.monday.createItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        columnValues: expect.objectContaining({ typeDeFacture: 'Factures' }),
+      }),
+    );
   });
 
   it('routes unsupported attachments to Review with a review item', async () => {
@@ -146,7 +209,27 @@ describe('ReceiptWorkflow', () => {
 
     expect(mocks.mistral.ocrAttachment).not.toHaveBeenCalled();
     expect(mocks.monday.createItem).toHaveBeenCalledWith(
-      expect.objectContaining({ itemName: expect.stringContaining('[REVUE]') }),
+      expect.objectContaining({
+        itemName: expect.stringContaining('[INCOMPLET]'),
+        columnValues: expect.objectContaining({
+          notesParticulieres: expect.stringContaining(EMAIL_AUTOMATION_NOTE),
+        }),
+      }),
+    );
+    expect(mocks.monday.createItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        itemName: expect.stringContaining('[INCOMPLET]'),
+        columnValues: expect.objectContaining({
+          notesParticulieres: expect.stringContaining('Lien email: https://outlook.office.com/mail/message-1'),
+        }),
+      }),
+    );
+    expect(mocks.monday.createItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        columnValues: expect.objectContaining({
+          notesParticulieres: expect.stringContaining('Unsupported attachment format'),
+        }),
+      }),
     );
     expect(mocks.graph.moveMessage).toHaveBeenCalledWith(email.id, 'review-folder');
   });
