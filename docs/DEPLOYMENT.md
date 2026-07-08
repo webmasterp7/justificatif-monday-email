@@ -46,7 +46,7 @@ Every created item also receives a monday.com update summarizing:
 - What was added.
 - Receipt/invoice reference and amount when available.
 - Who submitted it.
-- Source email subject, received date, and source email link. The service uses Microsoft Graph immutable IDs for API operations, then translates moved messages back to REST IDs to render mailbox-scoped Outlook Web links.
+- Source email subject, received date, and source email link. The service uses Microsoft Graph immutable IDs for API operations, then prefers the moved message `webLink` `ItemID` as the post-move REST ID to render mailbox-scoped Outlook Web links. ID translation is only a fallback when the moved link has no parseable `ItemID`.
 - Full stripped email/thread content.
 - Attached file names.
 - OCR/classification confidence, grouping explanation, and field-level status notes.
@@ -141,7 +141,7 @@ The service creates a same-board `Attention` item and moves the source email to 
 - monday.com item/file/update creation fails.
 - File upload retries are exhausted after item creation.
 
-The review item includes a detailed update with `Attention` reasons and the source email link. Graph requests use `Prefer: IdType="ImmutableId"` for stable API operations after moves; human Outlook links are generated as mailbox-scoped deeplinks from translated REST IDs.
+The review item includes a detailed update with `Attention` reasons and the source email link. Graph requests use `Prefer: IdType="ImmutableId"` for stable API operations after moves; human Outlook links are generated as mailbox-scoped deeplinks from the moved message `webLink` `ItemID`, with ID translation only as fallback.
 
 ### Intentional duplicate behavior
 

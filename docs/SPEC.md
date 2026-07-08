@@ -172,7 +172,7 @@ Then add an item update summarizing:
 - What was added.
 - For which receipt/invoice/reference/amount.
 - Who submitted it.
-- Source email subject, received date, and source-email link. The workflow uses Microsoft Graph immutable IDs for API operations, translates the moved message back to a REST ID, and renders a mailbox-scoped Outlook Web link for the configured mailbox.
+- Source email subject, received date, and source-email link. The workflow uses Microsoft Graph immutable IDs for API operations, prefers the moved message `webLink` `ItemID` as the post-move REST ID, and renders a mailbox-scoped Outlook Web link for the configured mailbox. If no `ItemID` can be parsed, it falls back to translating the moved immutable ID back to a REST ID.
 - Full stripped email/thread content.
 - Attached filenames.
 - Grouping explanation and confidence.
@@ -204,5 +204,5 @@ If a status column is later added to the board, the implementation should suppor
 - Review/error processing: create an `Attention` item, then move source email to `Review`, then post the final monday update with the source-email link and `Attention` reasons.
 - If monday item creation succeeds but file upload fails: retry uploads first. If retries are exhausted, add an update to the created item if possible, create/log the Error/Review path, and move the email to `Review`.
 - If final update posting fails after move, retry with backoff, keep the item in `Attention`, and emit structured logs for manual follow-up.
-- Microsoft Graph requests use `Prefer: IdType="ImmutableId"` for stable API operations after moves. For human Outlook links, the moved message ID is translated back to `restId` and rendered as a mailbox-scoped Outlook Web deeplink.
+- Microsoft Graph requests use `Prefer: IdType="ImmutableId"` for stable API operations after moves. For human Outlook links, the moved message `webLink` `ItemID` is used first and rendered as a mailbox-scoped Outlook Web deeplink; ID translation is only a fallback when the moved link has no parseable `ItemID`.
 - Duplicate detection is intentionally not implemented. Re-sent emails create new monday.com items.

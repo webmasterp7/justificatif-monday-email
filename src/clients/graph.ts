@@ -131,12 +131,15 @@ export class GraphMailClient {
   }
 
   private async withOutlookWebLink(message: EmailMessage): Promise<EmailMessage> {
-    const webLink = await this.buildOutlookWebLink(message.id);
+    const webLink = await this.buildOutlookWebLink(message.id, message.webLink);
     return webLink ? { ...message, webLink } : message;
   }
 
-  private async buildOutlookWebLink(messageId: string): Promise<string | undefined> {
-    const restId = await this.translateMessageId(messageId, 'restImmutableEntryId', 'restId');
+  private async buildOutlookWebLink(messageId: string, graphWebLink?: string): Promise<string | undefined> {
+    const restId =
+      extractRestIdFromOutlookWebLink(graphWebLink) ??
+      (await this.translateMessageId(messageId, 'restImmutableEntryId', 'restId'));
+
     if (!restId) {
       return undefined;
     }
@@ -239,6 +242,42 @@ function toEmailAttachment(attachment: GraphAttachmentResponse): EmailAttachment
     isInline: attachment.isInline ?? false,
     contentBytes: attachment.contentBytes,
   };
+}
+
+function extractRestIdFromOutlookWebLink(webLink: string | undefined): string | undefined {
+  const trimmed = webLink?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(trimmed);
+    for (const [key, value] of url.searchParams.entries()) {
+      if (key.toLowerCase() === 'itemid') {
+        return value.trim() || undefined;
+      }
+    }
+
+    const deepLinkReadMatch = /\/deeplink\/read\/([^/?#]+)/i.exec(url.pathname);
+    if (deepLinkReadMatch?.[1]) {
+      return decodeOutlookId(deepLinkReadMatch[1]);
+    }
+  } catch {
+    const itemIdMatch = /[?&]ItemID=([^&]+)/i.exec(trimmed);
+    if (itemIdMatch?.[1]) {
+      return decodeOutlookId(itemIdMatch[1]);
+    }
+  }
+
+  return undefined;
+}
+
+function decodeOutlookId(value: string): string | undefined {
+  try {
+    return decodeURIComponent(value).trim() || undefined;
+  } catch {
+    return value.trim() || undefined;
+  }
 }
 
 function stripHtml(content: string): string {

@@ -173,7 +173,7 @@ describe('monday payloads', () => {
     expect(values.notesParticulieres).toContain('Attention: Référence facture manquante');
   });
 
-  it('builds update body including moved link, attachments and thread content', () => {
+  it('builds update body including moved link and thread content', () => {
     const email: EmailMessage = {
       id: 'm1',
       subject: 'Receipt',
@@ -195,15 +195,16 @@ describe('monday payloads', () => {
     const body = buildUpdateBody({
       email,
       group,
-      attachmentNames: ['receipt.png'],
-      statut: 'Nouveau',
       emailThread: email.bodyText,
       movedMessageLink: 'https://outlook.office.com/mail/moved-id1',
     });
 
     expect(body).toContain('Alice');
-    expect(body).toContain('receipt.png');
     expect(body).toContain('92%');
+    expect(body).not.toContain('Statut interne:');
+    expect(body).not.toContain('Facture:');
+    expect(body).not.toContain('Fichiers ajoutés:');
+    expect(body).not.toContain('receipt.png');
     expect(body).toContain('Lien du mail');
     expect(body).not.toContain('Source email déplacée');
     expect(body).toContain('https://outlook.office.com/mail/moved-id1');
@@ -270,7 +271,46 @@ describe('monday payloads', () => {
     expect(toEmailMessage(messageWithoutWebLink).webLink).toBeUndefined();
   });
 
-  it('uses immutable Graph ids and builds shared-mailbox Outlook links from translated REST ids', async () => {
+  it('uses the moved Graph webLink ItemID to build shared-mailbox Outlook links', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: 'immutable-moved-id',
+          subject: 'Moved receipt',
+          receivedDateTime: '2026-06-22T12:00:00Z',
+          webLink: 'https://outlook.office365.com/owa/?ItemID=rest-id%2B%2F%3D&exvsurl=1&viewmodel=ReadMessageItem',
+          from: { emailAddress: { name: 'Alice', address: 'alice@example.com' } },
+          hasAttachments: true,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(GraphMailClient.prototype, 'getAccessToken').mockResolvedValue('token');
+
+    const client = new GraphMailClient({
+      tenantId: 'tenant',
+      clientId: 'client',
+      clientSecret: 'secret',
+      mailboxUserId: 'receipts@example.com',
+    });
+
+    const moved = await client.moveMessage('old-id', 'review-folder');
+
+    expect(moved.webLink).toBe(
+      'https://outlook.office.com/mail/receipts%40example.com/deeplink?ItemID=rest-id%2B%2F%3D&exvsurl=1',
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('/messages/old-id/move');
+    expect(fetchMock.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        headers: expect.objectContaining({ Prefer: 'IdType="ImmutableId"' }),
+      }),
+    );
+  });
+
+  it('falls back to translated REST ids when moved Graph webLink has no ItemID', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -279,7 +319,7 @@ describe('monday payloads', () => {
             id: 'immutable-moved-id',
             subject: 'Moved receipt',
             receivedDateTime: '2026-06-22T12:00:00Z',
-            webLink: 'https://outlook.office.com/owa/?ItemID=immutable-moved-id',
+            webLink: 'https://outlook.office.com/mail/inbox',
             from: { emailAddress: { name: 'Alice', address: 'alice@example.com' } },
             hasAttachments: true,
           }),
@@ -311,18 +351,12 @@ describe('monday payloads', () => {
       'https://outlook.office.com/mail/receipts%40example.com/deeplink?ItemID=rest-id%2B%2F%3D&exvsurl=1',
     );
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls[0]?.[0]).toContain('/messages/old-id/move');
     expect(fetchMock.mock.calls[1]?.[0]).toContain('/users/receipts%40example.com/translateExchangeIds');
     expect(JSON.parse(String((fetchMock.mock.calls[1]?.[1] as RequestInit).body))).toEqual({
       inputIds: ['immutable-moved-id'],
       sourceIdType: 'restImmutableEntryId',
       targetIdType: 'restId',
     });
-    expect(fetchMock.mock.calls[0]?.[1]).toEqual(
-      expect.objectContaining({
-        headers: expect.objectContaining({ Prefer: 'IdType="ImmutableId"' }),
-      }),
-    );
   });
 });
 

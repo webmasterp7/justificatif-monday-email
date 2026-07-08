@@ -225,7 +225,6 @@ export class ReceiptWorkflow {
         group: prepared.group,
         statut: prepared.statut,
         attentionReasons: prepared.attentionReasons,
-        attachmentNames: groupAttachments.map((attachment) => attachment.name),
       });
     }
 
@@ -255,8 +254,6 @@ export class ReceiptWorkflow {
       const updateBody = buildUpdateBody({
         email: movedEmail,
         group: created.group,
-        attachmentNames: created.attachmentNames,
-        statut: created.statut,
         emailThread: originalEmail.bodyText,
         movedMessageLink: movedEmail.webLink,
       });
@@ -405,7 +402,6 @@ interface CreatedItem {
   group: ReceiptGroup;
   statut: 'Nouveau' | 'Attention';
   attentionReasons: string[];
-  attachmentNames: string[];
 }
 
 export class PollingRunner {

@@ -252,7 +252,7 @@ describe('Factures workflow deterministic simulation scenarios', () => {
     );
     expect(graph.moveMessage).toHaveBeenCalledWith(email.id, 'processed-folder');
     expect(monday.createUpdate).toHaveBeenCalledTimes(1);
-    expect(monday.createUpdate.mock.calls[0]?.[0].body).toContain(fileName);
+    expect(monday.createUpdate.mock.calls[0]?.[0].body).not.toContain('Fichiers ajoutés:');
     expect(monday.updateItemStatus).toHaveBeenCalledWith({ itemId: 'item-1', statut: 'Nouveau' });
   });
 
@@ -487,7 +487,7 @@ describe('Factures workflow deterministic simulation scenarios', () => {
     expect(graph.moveMessage).toHaveBeenCalledWith(email.id, 'processed-folder');
     expect(monday.uploadFile).toHaveBeenCalledTimes(1);
     expect(monday.createUpdate).toHaveBeenCalledTimes(1);
-    expect(monday.createUpdate.mock.calls[0]?.[0].body).toContain('anomaly-missing-card-date.pdf');
+    expect(monday.createUpdate.mock.calls[0]?.[0].body).not.toContain('Fichiers ajoutés:');
   });
 
   it('keeps low-confidence groups in Attention', async () => {
@@ -518,7 +518,7 @@ describe('Factures workflow deterministic simulation scenarios', () => {
 
     expect(graph.moveMessage).toHaveBeenCalledWith(email.id, 'processed-folder');
     expect(monday.createUpdate).toHaveBeenCalledTimes(2);
-    expect(monday.createUpdate.mock.calls[0]![0].body).toContain('Uncertain group');
+    expect(monday.createUpdate.mock.calls[0]![0].body).toContain('45%');
     expect(monday.createUpdate.mock.calls[1]![0].body).toContain('Points d’attention');
     expect(monday.updateItemStatus).not.toHaveBeenCalled();
   });

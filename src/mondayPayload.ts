@@ -87,8 +87,6 @@ export function buildColumnValuesForReceipt(
 export interface BuildUpdateInput {
   email: EmailMessage;
   group: ReceiptGroup;
-  attachmentNames: string[];
-  statut: typeof MONDAY_STATUS_LABELS[number];
   emailThread?: string;
   movedMessageLink?: string;
 }
@@ -96,11 +94,6 @@ export interface BuildUpdateInput {
 export function buildUpdateBody(input: BuildUpdateInput): string {
   const subject = input.email.subject || '(sans objet)';
   const sender = input.email.sender.name || input.email.sender.email;
-  const amount =
-    input.group.montantFacture !== undefined && input.group.montantFacture !== null
-      ? ` / Montant ${input.group.montantFacture}`
-      : '';
-  const reference = input.group.referenceFacture ? ` / Référence ${escapeHtml(input.group.referenceFacture)}` : '';
   const emailThread = input.emailThread ?? '';
   const truncated = truncateEmailThread(emailThread);
   const formattedEmailThread = formatEmailThreadHtml(truncated.text);
@@ -112,12 +105,9 @@ export function buildUpdateBody(input: BuildUpdateInput): string {
     `<li>Objet email: ${escapeHtml(subject)}</li>`,
     `<li>Soumis par: ${escapeHtml(sender)}</li>`,
     `<li>Date de réception: ${escapeHtml(toDateOnly(input.email.receivedDateTime))}</li>`,
-    `<li>Statut interne: ${escapeHtml(input.statut)}</li>`,
-    `<li>Facture: ${escapeHtml(input.group.itemName)}${reference}${amount}</li>`,
     renderMessageLink(messageLink),
     `<li>Confiance: ${Math.round(input.group.confidence * 100)}%</li>`,
     `<li>Regroupement: ${escapeHtml(input.group.groupingExplanation)}</li>`,
-    `<li>Fichiers ajoutés: ${escapeHtml(input.attachmentNames.join(', ') || 'aucun')}</li>`,
     `<li>Message source:<br>${formattedEmailThread}</li>`,
     ...(truncated.wasTruncated ? ['<li>Le corps de l’e-mail a été tronqué pour rester dans les limites monday.</li>'] : []),
     '</ul>',
