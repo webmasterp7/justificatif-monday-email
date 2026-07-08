@@ -44,7 +44,7 @@ Required Graph application permission: `Mail.ReadWrite`, with admin consent. The
 | --- | --- | --- | --- |
 | `MISTRAL_API_KEY` | yes | | Mistral API key. |
 | `MISTRAL_OCR_MODEL` | no | `mistral-ocr-latest` | OCR model. |
-| `MISTRAL_CHAT_MODEL` | no | `mistral-small-latest` | Chat model for grouping/extraction. |
+| `MISTRAL_CHAT_MODEL` | no | `mistral-large-latest` | Chat model for grouping/extraction. |
 
 ### monday.com
 
@@ -64,9 +64,13 @@ Fixed MVP column IDs:
 | `Date de Paiement` | `date_mm1ca3zv` | date | Extracted from receipt when present. |
 | `Reference Facture` | `text_mm1g3ajw` | text | Extracted invoice/reference number when present. |
 | `Montant Facture` | `numeric_mm1chk67` | numbers | Extracted invoice amount when present. |
-| `Notes Particulières` | `long_text_mm38snee` | long_text | Summary of email content and processing notes. |
+| `Notes Particulières` | `long_text_mm38snee` | long_text | Automation provenance and notes. |
 | `Soumis par` | `text_mm3seznv` | text | Sender display name/email. |
-| `Type de facture` | `dropdown_mm3sz6mp` | dropdown | `Factures` or `Carte`. |
+| `Type de facture` | `dropdown_mm3sz6mp` | dropdown | `Carte` for card-paid/card-debited invoices or receipts; `Factures` for bank-transfer invoices only when QR/QR-facture evidence and IBAN/QR-IBAN/bank-transfer evidence are present. |
+| `Provenance suggérée` | `dropdown_mm50vh09` | dropdown | Cloned label for suggested provenance/issuer. |
+| `État de la Facture` | *(board-configured)* | dropdown | Deterministic workflow value: `Facture Reçue`. |
+
+The legacy `Site` column is intentionally not filled by this automation.
 
 ## Accepted attachments
 
@@ -82,9 +86,10 @@ Unsupported attachments route the email to the review/error path. Body-only rece
 
 ## Classification/extraction contract
 
-The classifier receives:
+The LLM receives:
 
-- Source email metadata: sender name/email, subject, received date, and a compact email body summary/text.
+- Full stripped email/thread text (HTML removed), including reply/forward context.
+- Sender metadata: display name, sender email, and sender context.
 - Accepted attachment metadata: stable attachment ID, filename, MIME type, size.
 - OCR markdown per accepted attachment.
 
@@ -95,18 +100,36 @@ It must return JSON matching this shape:
   "decision": "create_items" | "review",
   "confidence": 0.0,
   "reviewReason": "string or null",
-  "emailSummary": "short summary of the email body/content",
+  "emailSummary": "short summary of the stripped email/thread",
   "receiptGroups": [
     {
-      "itemName": "merchant/date/reference style monday item name",
-      "confidence": 0.0,
+      "itemName": "concise French payment/service title without full date or invoice/reference number, e.g. Abonnement serveur Hetzner juillet",
+      "groupStatus": "Nouveau" | "Attention",
+      "groupConfidence": 0.0,
       "groupingExplanation": "why these files belong together",
+      "groupingStatus": "CONFIDENT|UNCERTAIN",
       "attachmentIds": ["attachment-id-1"],
-      "referenceFacture": "invoice/reference number or null",
-      "montantFacture": 123.45,
-      "datePaiement": "YYYY-MM-DD or null",
-      "typeDeFacture": "Factures" | "Carte",
-      "notesParticulieres": "email summary plus receipt-specific notes"
+      "provenanceSuggeree": {
+        "value": "label or null",
+        "status": "CONFIDENT|APPROXIMATE|UNKNOWN",
+        "reason": "optional"
+      },
+      "referenceFacture": {
+        "value": "invoice/reference number or null",
+        "status": "CONFIDENT|UNCERTAIN|MISSING|INVALID",
+        "reason": "optional"
+      },
+      "montantFacture": {
+        "value": 123.45,
+        "status": "CONFIDENT|UNCERTAIN|MISSING|INVALID",
+        "reason": "optional"
+      },
+      "datePaiement": {
+        "value": "YYYY-MM-DD or null",
+        "status": "CONFIDENT|UNCERTAIN|MISSING|INVALID",
+        "reason": "optional"
+      },
+      "notesParticulieres": "optional receipt-specific notes"
     }
   ]
 }
@@ -115,12 +138,15 @@ It must return JSON matching this shape:
 Validation rules:
 
 - `decision=review` always routes to Error/Review.
-- Any group below `AUTO_CREATE_CONFIDENCE_THRESHOLD` routes the email to Error/Review.
+- Every group must include `groupStatus` (`Nouveau` or `Attention`) and at least one `attachmentIds[]` entry.
+- `Nouveau` is valid only when required fields are `CONFIDENT` and provenance is `CONFIDENT`.
+- `Attention` is required when any required field is `UNCERTAIN`, `MISSING`, or `INVALID`; provenance is not confident; grouping is uncertain; or unsupported content patterns are present (body-only, unsupported attachments).
 - Every `attachmentIds[]` entry must refer to an accepted attachment from the email.
 - Every accepted attachment should be assigned to exactly one group for normal creation.
-- `typeDeFacture` must be exactly `Factures` or `Carte`; unknown values become `Factures` only when the model gives a clear rationale, otherwise Review.
-- Dates must be ISO `YYYY-MM-DD`; invalid dates are omitted and mentioned in the update/log.
-- Amounts must be numeric decimal values; invalid amounts are omitted and mentioned in the update/log.
+- `itemName` must describe the payment/service purpose in French using available email/OCR evidence; it must not include full dates, invoice numbers, or reference numbers.
+- For `CONFIDENT` status, `referenceFacture`/`montantFacture`/`datePaiement` must be valid (`YYYY-MM-DD` for dates; decimal for amounts). Otherwise set value to `null` and status accordingly.
+- `typeDeFacture` must be `Carte` for invoices/receipts paid by card or to be debited from a card, including online-service invoices without QR/IBAN evidence.
+- `typeDeFacture` must be `Factures` only for bank-transfer invoices with QR/QR-facture/Swiss QR evidence plus IBAN/QR-IBAN/bank-transfer evidence; invoice wording, invoice numbers, payment references, or amount-due wording alone are not sufficient.
 
 ## monday item payload mapping
 
@@ -128,40 +154,54 @@ For each normal receipt group:
 
 - Item name: classifier `itemName`.
 - `Date de Réception`: source email received date.
-- `Date de Paiement`: `datePaiement` when present.
-- `Reference Facture`: `referenceFacture` when present.
-- `Montant Facture`: `montantFacture` when present.
-- `Notes Particulières`: email-automation provenance marker, source email link (`Lien email: ...`), and `notesParticulieres` or the email summary.
+- `Date de Paiement`: `datePaiement.value` when status is `CONFIDENT`.
+- `Reference Facture`: `referenceFacture.value` when status is `CONFIDENT`.
+- `Montant Facture`: `montantFacture.value` when status is `CONFIDENT`.
+- `Provenance suggérée`: `provenanceSuggeree.value` when present.
+- `État de la Facture`: always `Facture Reçue`.
+- `Type de facture`: classifier/evidence-adjusted value (`Carte` for card-paid/card-debited receipts or invoices; `Factures` for bank-transfer invoices with QR plus IBAN/bank-transfer evidence).
+- `Notes Particulières`: `Ajouté automatiquement par email`.
+  - If `groupStatus` is `Attention`, append `Attention: ...` for missing/uncertain required fields, approximate provenance, unsupported content, or grouping uncertainty.
 - `Soumis par`: sender display name, falling back to sender email.
-- `Type de facture`: dropdown label from `typeDeFacture`.
 - `Facture`: uploaded after item creation via `add_file_to_column`.
+- `Statut`: normal receipt items are created as `Attention` first, then promoted to `Nouveau` only after file upload, email move, final update creation, and all validation checks succeed.
 
 Then add an item update summarizing:
 
 - What was added.
 - For which receipt/invoice/reference/amount.
 - Who submitted it.
-- Source email subject, received date, and source email web link.
+- Source email subject, received date, and source-email link. The workflow uses Microsoft Graph immutable IDs for API operations, translates the moved message back to a REST ID, and renders a mailbox-scoped Outlook Web link for the configured mailbox.
+- Full stripped email/thread content.
 - Attached filenames.
 - Grouping explanation and confidence.
-- Any omitted fields or warnings.
+- Per-field statuses and warnings.
+
+If `Attention` reasons exist, add a second dedicated attention update after the summary update. Date-payment attention reasons for `Carte` items are deduplicated to a single French reason.
+
+If the stripped thread exceeds monday limits, truncate it and note truncation in the update.
 
 ## Error/Review representation
 
-The provided column list has no dedicated status column. For the MVP, Error/Review cases are represented in the same board by:
+Error/Review cases are represented in the same board as standard `Attention` items by:
 
-- Item name prefixed with `[INCOMPLET]`.
+- Item name from the source email subject/id, without a special prefix.
+- `Statut`: `Attention`.
 - `Date de Réception` from the source email when available.
-- `Notes Particulières` containing the email-automation provenance marker, source email link (`Lien email: ...`), error/review reason, and email summary.
-- `Soumis par` populated from the sender.
-- `Type de facture` set to `Factures` by default only to satisfy dropdown requirements if monday requires a value.
-- A monday update containing the detailed reason, source context, attachment list, and next action.
+- `Notes Particulières`: `Ajouté automatiquement par email` plus `Attention: ...` reasons.
+- `Provenance suggérée` set from model suggestion when available.
+- `Type de facture` set from the same classifier/evidence-adjusted rules when available; fallback review items use `Factures` by default.
+- A monday update containing the detailed attention reason, source context, attachment list, field statuses, and next action.
+
+`Nouveau` and `Attention` are the document-level status values for this plan.
 
 If a status column is later added to the board, the implementation should support configuring it without changing the core workflow.
 
 ## Email routing
 
-- Normal successful processing: move source email to `Processed`.
-- Review/error processing: create an Error/Review item, then move source email to `Review`.
+- Normal successful processing: create item initially as `Attention`, upload `Facture` files, move source email to `Processed`, post the final monday summary update with the source-email link, post a dedicated attention update when reasons exist, then promote to `Nouveau` only when no attention reasons remain.
+- Review/error processing: create an `Attention` item, then move source email to `Review`, then post the final monday update with the source-email link and `Attention` reasons.
 - If monday item creation succeeds but file upload fails: retry uploads first. If retries are exhausted, add an update to the created item if possible, create/log the Error/Review path, and move the email to `Review`.
+- If final update posting fails after move, retry with backoff, keep the item in `Attention`, and emit structured logs for manual follow-up.
+- Microsoft Graph requests use `Prefer: IdType="ImmutableId"` for stable API operations after moves. For human Outlook links, the moved message ID is translated back to `restId` and rendered as a mailbox-scoped Outlook Web deeplink.
 - Duplicate detection is intentionally not implemented. Re-sent emails create new monday.com items.

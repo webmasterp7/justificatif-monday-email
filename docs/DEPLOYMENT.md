@@ -33,23 +33,31 @@ Required board columns:
 | Date de Paiement | `date_mm1ca3zv` | date | Extracted payment date when present. |
 | Reference Facture | `text_mm1g3ajw` | text | Extracted invoice/reference number. |
 | Montant Facture | `numeric_mm1chk67` | numbers | Extracted invoice amount. |
-| Notes Particulières | `long_text_mm38snee` | long_text | Email-automation provenance marker, source email link, email summary, and processing notes. |
+| Notes Particulières | `long_text_mm38snee` | long_text | Automation provenance and notes (`Ajouté automatiquement par email` + `Attention` reasons). |
 | Soumis par | `text_mm3seznv` | text | Sender name/email. |
-| Type de facture | `dropdown_mm3sz6mp` | dropdown | `Factures` or `Carte`. |
+| Type de facture | `dropdown_mm3sz6mp` | dropdown | Left blank by default (legacy category no longer used); use `Factures` only if a value is required. |
+| Provenance suggérée | `dropdown_mm50vh09` | dropdown | Suggested provenance/issuer (cloned from Site labels). |
+| État de la Facture | *(board-configured)* | dropdown | Deterministic workflow value: `Facture Reçue`. |
+
+The legacy `Site` column is intentionally not filled by this automation.
 
 Every created item also receives a monday.com update summarizing:
 
 - What was added.
 - Receipt/invoice reference and amount when available.
 - Who submitted it.
-- Source email subject, received date, and source email link.
+- Source email subject, received date, and source email link. The service uses Microsoft Graph immutable IDs for API operations, then translates moved messages back to REST IDs to render mailbox-scoped Outlook Web links.
+- Full stripped email/thread content.
 - Attached file names.
-- OCR/classification confidence and grouping explanation.
-- Review/error warnings when relevant.
+- OCR/classification confidence, grouping explanation, and field-level status notes.
 
-Created items are identifiable as email-automation-created through `Notes Particulières` (including source email link) and the detailed item update (including the link).
+If review or attention reasons exist, the service adds a second dedicated attention update after the summary update. Duplicate same-field attention reasons are collapsed to one French reason where possible.
 
-Review/error items use the same board. Because no dedicated status column was provided, they are represented by `[INCOMPLET]` item-name prefixes, `Notes Particulières` (including the source email link), and detailed updates (including the link).
+If the stripped thread exceeds monday limits, the update text is truncated with an explicit truncation marker.
+
+Created items are identifiable as email-automation-created through `Notes Particulières` (including default `Ajouté automatiquement par email` and `Attention` reasons), provenance fields, and detailed item updates with source email links.
+
+Review/error items use the same board and are represented as standard `Attention` items: no special item-name prefix, with reasons in `Notes Particulières` and item updates.
 
 ## 3. Dokploy environment variables
 
@@ -79,7 +87,7 @@ AUTO_CREATE_CONFIDENCE_THRESHOLD=0.7
 UPLOAD_RETRY_ATTEMPTS=3
 UPLOAD_RETRY_DELAY_MS=1000
 MISTRAL_OCR_MODEL=mistral-ocr-latest
-MISTRAL_CHAT_MODEL=mistral-small-latest
+MISTRAL_CHAT_MODEL=mistral-large-latest
 MONDAY_GROUP_ID=
 MONDAY_API_VERSION=2024-10
 ```
@@ -97,6 +105,14 @@ pnpm build
 pnpm lint
 ```
 
+For deterministic workflow regression checks, run the dry-run fixture simulation:
+
+```bash
+pnpm run test:factures-simulation
+```
+
+(see [`docs/FACTURES_SIMULATION.md`](FACTURES_SIMULATION.md) for scenarios and fixture conventions).
+
 Dokploy should build the Docker image and run:
 
 ```bash
@@ -109,20 +125,22 @@ node dist/index.js
 
 - Creates one monday.com item per detected receipt group.
 - Uploads receipt files to `Facture`.
-- Adds a summary update.
 - Moves the source email to `Processed`.
+- Adds a final summary update, plus a dedicated attention update when attention reasons exist.
 
 ### Review/error emails
 
-The service creates a same-board review item and moves the source email to `Review` when:
+The service creates a same-board `Attention` item and moves the source email to `Review` when:
 
 - The email has no attachments/body-only receipt.
-- Attachments are not PDF/images.
+- Attachments are unsupported types.
 - OCR fails.
-- Classifier output is invalid or low confidence.
+- Classifier output is invalid or `Attention`.
 - Grouping is ambiguous.
 - monday.com item/file/update creation fails.
 - File upload retries are exhausted after item creation.
+
+The review item includes a detailed update with `Attention` reasons and the source email link. Graph requests use `Prefer: IdType="ImmutableId"` for stable API operations after moves; human Outlook links are generated as mailbox-scoped deeplinks from translated REST IDs.
 
 ### Intentional duplicate behavior
 
@@ -130,4 +148,4 @@ No duplicate suppression exists in the MVP. If the same receipt is forwarded twi
 
 ### Logs
 
-The MVP has no database. Use Dokploy container logs for traceability. Logs are JSON lines containing message IDs, subjects, sender, route decisions, monday item/update IDs, retry attempts, and error reasons.
+The MVP has no database. Use Dokploy container logs for traceability. Logs are JSON lines containing message IDs, subjects, sender, route decisions, monday item/update IDs, retry attempts, and error reasons (including final-update success/failure and truncation events).

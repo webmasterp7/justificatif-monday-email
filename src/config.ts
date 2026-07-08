@@ -10,9 +10,41 @@ export const MONDAY_COLUMNS = {
   notesParticulieres: 'long_text_mm38snee',
   soumisPar: 'text_mm3seznv',
   typeDeFacture: 'dropdown_mm3sz6mp',
+  statut: 'color_mm38nv5x',
+  etatDeFacture: 'color_mm1cedyf',
+  fournisseur: 'text_mm1cj8bv',
+  provenanceSuggeree: 'dropdown_mm50vh09',
 } as const;
 
 export const MONDAY_INVOICE_TYPES = ['Factures', 'Carte'] as const satisfies readonly InvoiceType[];
+
+export const MONDAY_STATUS_LABELS = ['Nouveau', 'Attention'] as const;
+export const MONDAY_STATUTS = MONDAY_STATUS_LABELS;
+
+export const MONDAY_INVOICE_STATE_FACTURE_RECUE = 'Facture Reçue';
+export const MONDAY_INVOICE_STATES = [MONDAY_INVOICE_STATE_FACTURE_RECUE] as const;
+
+export const MONDAY_AUTOMATION_NOTE = 'Ajouté automatiquement par email';
+export const MONDAY_AUTOMATION_NOTE_TEXT = MONDAY_AUTOMATION_NOTE;
+
+export const MONDAY_PROVENANCE_LABELS = [
+  'Direction',
+  'Préverenges',
+  'Montreux',
+  'Charmilles',
+  'Cornavin',
+  'Renens',
+  'Chailly',
+  'Avant-Poste',
+  'Fribourg',
+  'Formation Med3A',
+  'E-shop',
+  'Formation 4Med',
+  '4MEd',
+  'Med3A',
+] as const;
+
+export const MONDAY_PROVENANCE_COLUMN_ID = MONDAY_COLUMNS.provenanceSuggeree;
 
 const nonEmptyString = z.string().trim().min(1);
 const optionalNonEmptyString = z.preprocess(
@@ -37,7 +69,7 @@ const envSchema = z.object({
 
   MISTRAL_API_KEY: nonEmptyString,
   MISTRAL_OCR_MODEL: z.string().trim().min(1).default('mistral-ocr-latest'),
-  MISTRAL_CHAT_MODEL: z.string().trim().min(1).default('mistral-small-latest'),
+  MISTRAL_CHAT_MODEL: z.string().trim().min(1).default('mistral-large-latest'),
 
   MONDAY_API_TOKEN: nonEmptyString,
   MONDAY_BOARD_ID: nonEmptyString,

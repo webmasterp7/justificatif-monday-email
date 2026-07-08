@@ -27,6 +27,10 @@ interface GraphCollection<T> {
   '@odata.nextLink'?: string;
 }
 
+interface TranslateExchangeIdsResponse {
+  value: Array<{ sourceId: string; targetId?: string }>;
+}
+
 export interface GraphMailConfig {
   tenantId: string;
   clientId: string;
@@ -119,7 +123,63 @@ export class GraphMailClient {
       { destinationId },
     );
 
-    return toEmailMessage(moved);
+    if (moved.webLink?.trim()) {
+      return this.withOutlookWebLink(toEmailMessage(moved));
+    }
+
+    return this.getMessage(moved.id);
+  }
+
+  private async withOutlookWebLink(message: EmailMessage): Promise<EmailMessage> {
+    const webLink = await this.buildOutlookWebLink(message.id);
+    return webLink ? { ...message, webLink } : message;
+  }
+
+  private async buildOutlookWebLink(messageId: string): Promise<string | undefined> {
+    const restId = await this.translateMessageId(messageId, 'restImmutableEntryId', 'restId');
+    if (!restId) {
+      return undefined;
+    }
+
+    const params = new URLSearchParams({
+      ItemID: restId,
+      exvsurl: '1',
+    });
+
+    return `https://outlook.office.com/mail/${encodeURIComponent(this.mailboxUserId)}/deeplink?${params.toString()}`;
+  }
+
+  private async translateMessageId(
+    messageId: string,
+    sourceIdType: 'restImmutableEntryId' | 'restId',
+    targetIdType: 'restImmutableEntryId' | 'restId',
+  ): Promise<string | undefined> {
+    try {
+      const response = await this.graphPost<TranslateExchangeIdsResponse>(
+        `/users/${encodeURIComponent(this.mailboxUserId)}/translateExchangeIds`,
+        {
+          inputIds: [messageId],
+          sourceIdType,
+          targetIdType,
+        },
+      );
+
+      return response.value.find((id) => id.sourceId === messageId)?.targetId;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async getMessage(messageId: string): Promise<EmailMessage> {
+    const params = new URLSearchParams({
+      '$select': 'id,subject,receivedDateTime,webLink,from,sender,body,hasAttachments',
+    });
+
+    const response = await this.graphGet<GraphMessageResponse>(
+      `/users/${encodeURIComponent(this.mailboxUserId)}/messages/${encodeURIComponent(messageId)}?${params.toString()}`,
+    );
+
+    return this.withOutlookWebLink(toEmailMessage(response));
   }
 
   private async graphGet<T>(pathOrUrl: string): Promise<T> {
@@ -138,6 +198,7 @@ export class GraphMailClient {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
+        Prefer: 'IdType="ImmutableId"',
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
@@ -153,11 +214,7 @@ export class GraphMailClient {
 
 export function toEmailMessage(message: GraphMessageResponse): EmailMessage {
   const sender = message.from?.emailAddress ?? message.sender?.emailAddress ?? {};
-  const webLink = message.webLink?.trim();
-
-  if (!webLink) {
-    throw new Error(`Microsoft Graph message ${message.id} did not include webLink`);
-  }
+  const webLink = message.webLink?.trim() || undefined;
 
   return {
     id: message.id,
@@ -186,14 +243,22 @@ function toEmailAttachment(attachment: GraphAttachmentResponse): EmailAttachment
 
 function stripHtml(content: string): string {
   return content
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/\r\n|\r/g, '\n')
+    .replace(/<style[\s\S]*?<\/style>/gi, '\n')
+    .replace(/<script[\s\S]*?<\/script>/gi, '\n')
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\s*\/?\s*(?:p|div|li|tr|table|section|article|header|footer|h[1-6])(?:\s[^>]*)?>/gi, '\n')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
-    .replace(/\s+/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .split('\n')
+    .map((line) => line.replace(/[ \t\f\v]+/g, ' ').trim())
+    .filter(Boolean)
+    .join('\n')
     .trim();
 }
 

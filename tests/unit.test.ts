@@ -3,9 +3,10 @@ import { filterReceiptAttachments } from '../src/attachments.js';
 import { loadConfig, MONDAY_COLUMNS } from '../src/config.js';
 import { parseClassificationJson } from '../src/classification.js';
 import { MondayClient } from '../src/clients/monday.js';
-import { toEmailMessage } from '../src/clients/graph.js';
+import { GraphMailClient, toEmailMessage } from '../src/clients/graph.js';
 import {
   EMAIL_AUTOMATION_NOTE,
+  buildAttentionUpdateBody,
   buildColumnValuesForReceipt,
   buildMondayColumnValues,
   buildReviewUpdateBody,
@@ -25,6 +26,7 @@ const validEnv = {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe('config validation', () => {
@@ -63,7 +65,7 @@ describe('attachment filtering', () => {
 });
 
 describe('classification parsing', () => {
-  it('normalizes date, amount, and dropdown values', () => {
+  it('normalizes legacy date, amount, and dropdown values', () => {
     const parsed = parseClassificationJson(`{
       "decision": "create_items",
       "confidence": 0.9,
@@ -84,6 +86,42 @@ describe('classification parsing', () => {
     expect(parsed.receiptGroups[0]?.montantFacture).toBe(123.45);
     expect(parsed.receiptGroups[0]?.datePaiement).toBe('2026-06-22');
     expect(parsed.receiptGroups[0]?.typeDeFacture).toBe('Factures');
+    expect(parsed.receiptGroups[0]?.fieldStatuses).toMatchObject({
+      itemName: { status: 'confident', value: 'Merchant 2026-06-22' },
+      referenceFacture: { status: 'confident', value: 'INV-1' },
+    });
+  });
+
+  it('parses the new field-status contract with provenance and missing-value statuses', () => {
+    const parsed = parseClassificationJson(`{
+      "decision": "create_items",
+      "confidence": 0.93,
+      "emailSummary": "Receipt email",
+      "receiptGroups": [{
+        "itemName": {"status": "confident", "value": "Receipt from Direction"},
+        "confidence": 0.93,
+        "groupingExplanation": {"status": "confident", "value": "single PDF"},
+        "attachmentIds": ["a1", "a2"],
+        "referenceFacture": {"status": "uncertain", "value": null, "reason": "No invoice number visible"},
+        "montantFacture": {"status": "confident", "value": 99.5},
+        "datePaiement": {"status": "confident", "value": "2026-06-22"},
+        "typeDeFacture": {"status": "confident", "value": "Carte"},
+        "notesParticulieres": {"status": "confident", "value": "Email summary"},
+        "provenanceSuggeree": {"status": "confident", "value": "Direction"},
+        "soumisPar": {"status": "confident", "value": "Alice <alice@ex.com>"},
+        "fournisseur": {"status": "uncertain", "value": null, "reason": "Unable to read vendor name"}
+      }]
+    }`);
+
+    expect(parsed.receiptGroups[0]?.typeDeFacture).toBe('Carte');
+    expect(parsed.receiptGroups[0]?.provenanceSuggeree).toBe('Direction');
+    expect(parsed.receiptGroups[0]?.fieldStatuses?.referenceFacture).toEqual({
+      status: 'uncertain',
+      value: null,
+      reason: 'No invoice number visible',
+    });
+    expect(parsed.receiptGroups[0]?.fieldStatuses?.soumisPar?.status).toBe('confident');
+    expect(parsed.receiptGroups[0]?.fournisseur).toBeNull();
   });
 });
 
@@ -94,17 +132,21 @@ describe('monday payloads', () => {
       datePaiement: '2026-06-23',
       referenceFacture: 'INV-42',
       montantFacture: 42.5,
-      notesParticulieres: 'Summary',
+      notesParticulieres: EMAIL_AUTOMATION_NOTE,
       soumisPar: 'Sender',
       typeDeFacture: 'Carte',
+      statut: 'Nouveau',
+      etatDeFacture: 'Facture Reçue',
     });
 
     expect(payload[MONDAY_COLUMNS.dateReception]).toEqual({ date: '2026-06-22' });
     expect(payload[MONDAY_COLUMNS.montantFacture]).toBe('42.5');
     expect(payload[MONDAY_COLUMNS.typeDeFacture]).toEqual({ labels: ['Carte'] });
+    expect(payload[MONDAY_COLUMNS.statut]).toEqual({ label: 'Nouveau' });
+    expect(payload[MONDAY_COLUMNS.etatDeFacture]).toEqual({ label: 'Facture Reçue' });
   });
 
-  it('adds automation provenance to receipt item notes', () => {
+  it('adds automation note and attention suffix for attention items', () => {
     const email: EmailMessage = {
       id: 'm1',
       subject: 'Receipt',
@@ -122,14 +164,16 @@ describe('monday payloads', () => {
       notesParticulieres: 'Summary',
     };
 
-    const values = buildColumnValuesForReceipt(email, group);
+    const values = buildColumnValuesForReceipt(email, group, {
+      statut: 'Attention',
+      attentionReasons: ['Référence facture manquante'],
+    });
 
     expect(values.notesParticulieres).toContain(EMAIL_AUTOMATION_NOTE);
-    expect(values.notesParticulieres).toContain('Lien email: https://outlook.office.com/mail/id1');
-    expect(values.notesParticulieres).toContain('Summary');
+    expect(values.notesParticulieres).toContain('Attention: Référence facture manquante');
   });
 
-  it('renders update body with source context and grouping confidence', () => {
+  it('builds update body including moved link, attachments and thread content', () => {
     const email: EmailMessage = {
       id: 'm1',
       subject: 'Receipt',
@@ -137,6 +181,7 @@ describe('monday payloads', () => {
       webLink: 'https://outlook.office.com/mail/id1',
       sender: { name: 'Alice', email: 'alice@example.com' },
       hasAttachments: true,
+      bodyText: 'Line1\n\nLine2',
     };
     const group: ReceiptGroup = {
       itemName: 'Merchant receipt',
@@ -147,15 +192,34 @@ describe('monday payloads', () => {
       notesParticulieres: 'Summary',
     };
 
-    const body = buildUpdateBody({ email, group, attachmentNames: ['receipt.png'] });
+    const body = buildUpdateBody({
+      email,
+      group,
+      attachmentNames: ['receipt.png'],
+      statut: 'Nouveau',
+      emailThread: email.bodyText,
+      movedMessageLink: 'https://outlook.office.com/mail/moved-id1',
+    });
 
     expect(body).toContain('Alice');
     expect(body).toContain('receipt.png');
     expect(body).toContain('92%');
-    expect(body).toContain('https://outlook.office.com/mail/id1');
+    expect(body).toContain('Lien du mail');
+    expect(body).not.toContain('Source email déplacée');
+    expect(body).toContain('https://outlook.office.com/mail/moved-id1');
+    expect(body).toContain('Message source:<br>Line1<br><br>Line2');
+    expect(body).not.toContain('Attention:');
   });
 
-  it('includes source link in review update body', () => {
+  it('builds a dedicated escaped attention update body', () => {
+    const body = buildAttentionUpdateBody(['Date <paiement> manquante', 'Référence & montant incertains']);
+
+    expect(body).toContain('Points d’attention');
+    expect(body).toContain('Attention: Date &lt;paiement&gt; manquante');
+    expect(body).toContain('Attention: Référence &amp; montant incertains');
+  });
+
+  it('includes source link and thread in review update body', () => {
     const email: EmailMessage = {
       id: 'm1',
       subject: 'Receipt',
@@ -163,35 +227,101 @@ describe('monday payloads', () => {
       webLink: 'https://outlook.office.com/mail/id1',
       sender: { name: 'Alice', email: 'alice@example.com' },
       hasAttachments: true,
+      bodyText: 'Thread content',
     };
 
     const body = buildReviewUpdateBody({
       email,
       reason: 'No supported attachments',
       attachmentNames: ['receipt.png'],
+      emailThread: email.bodyText,
+      movedMessageLink: 'https://outlook.office.com/mail/moved-id1',
     });
 
-    expect(body).toContain('Raison: No supported attachments');
-    expect(body).toContain('https://outlook.office.com/mail/id1');
+    expect(body).toContain('Attention: No supported attachments');
+    expect(body).toContain('Lien du mail');
+    expect(body).not.toContain('Source email déplacée');
+    expect(body).toContain('https://outlook.office.com/mail/moved-id1');
+    expect(body).toContain('Message source:<br>Thread content');
   });
 
-  it('maps webLink from Graph message and rejects missing web links', () => {
+  it('maps webLink from Graph message and tolerates missing web links', () => {
     const message = {
       id: 'm2',
       subject: 'Receipt',
       receivedDateTime: '2026-06-22T12:00:00Z',
       webLink: '  https://outlook.office.com/mail/id2  ',
       from: { emailAddress: { name: 'Bob', address: 'bob@example.com' } },
-      body: { content: '<p>Hello</p>' },
+      body: { content: '<div>Hello<br>Line 2</div><p>Next paragraph</p>' },
       hasAttachments: false,
     };
 
     const email = toEmailMessage(message);
 
     expect(email.webLink).toBe('https://outlook.office.com/mail/id2');
+    expect(email.bodyText).toBe('Hello\nLine 2\nNext paragraph');
 
-    expect(() => toEmailMessage({ id: 'm3', subject: 'Broken', receivedDateTime: '2026-06-22T12:00:00Z' } as any)).toThrow(
-      'did not include webLink',
+    const messageWithoutWebLink: Parameters<typeof toEmailMessage>[0] = {
+      id: 'm3',
+      subject: 'Broken',
+      receivedDateTime: '2026-06-22T12:00:00Z',
+    };
+
+    expect(toEmailMessage(messageWithoutWebLink).webLink).toBeUndefined();
+  });
+
+  it('uses immutable Graph ids and builds shared-mailbox Outlook links from translated REST ids', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'immutable-moved-id',
+            subject: 'Moved receipt',
+            receivedDateTime: '2026-06-22T12:00:00Z',
+            webLink: 'https://outlook.office.com/owa/?ItemID=immutable-moved-id',
+            from: { emailAddress: { name: 'Alice', address: 'alice@example.com' } },
+            hasAttachments: true,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            value: [{ sourceId: 'immutable-moved-id', targetId: 'rest-id+/=' }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(GraphMailClient.prototype, 'getAccessToken').mockResolvedValue('token');
+
+    const client = new GraphMailClient({
+      tenantId: 'tenant',
+      clientId: 'client',
+      clientSecret: 'secret',
+      mailboxUserId: 'receipts@example.com',
+    });
+
+    const moved = await client.moveMessage('old-id', 'review-folder');
+
+    expect(moved.webLink).toBe(
+      'https://outlook.office.com/mail/receipts%40example.com/deeplink?ItemID=rest-id%2B%2F%3D&exvsurl=1',
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('/messages/old-id/move');
+    expect(fetchMock.mock.calls[1]?.[0]).toContain('/users/receipts%40example.com/translateExchangeIds');
+    expect(JSON.parse(String((fetchMock.mock.calls[1]?.[1] as RequestInit).body))).toEqual({
+      inputIds: ['immutable-moved-id'],
+      sourceIdType: 'restImmutableEntryId',
+      targetIdType: 'restId',
+    });
+    expect(fetchMock.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        headers: expect.objectContaining({ Prefer: 'IdType="ImmutableId"' }),
+      }),
     );
   });
 });

@@ -1,4 +1,5 @@
 import { Mistral } from '@mistralai/mistralai';
+import { MONDAY_PROVENANCE_LABELS } from '../config.js';
 import { parseClassificationJson } from '../classification.js';
 import type { AcceptedAttachment, ClassificationResult, EmailMessage, OcrDocument } from '../types.js';
 
@@ -106,51 +107,109 @@ function buildClassificationPrompt(input: {
     attachmentId: document.attachmentId,
     fileName: document.fileName,
     pageCount: document.pageCount,
-    markdown: document.markdown.slice(0, 12000),
+    markdown: document.markdown,
   }));
+
+  const provenanceLabels = [...MONDAY_PROVENANCE_LABELS];
 
   return JSON.stringify(
     {
-      task:
-        'Group attachments into one monday.com item per receipt/invoice, choose an item name, extract only the requested fields, and route uncertain cases to review.',
-      rules: [
-        `Use decision=create_items only when every group confidence is at least ${input.confidenceThreshold}.`,
-        'Use decision=review when the email is body-only, unsupported, ambiguous, or attachments cannot be confidently grouped.',
-        'typeDeFacture must be exactly Factures or Carte.',
-        'Carte means the payment has already been made by card (examples: paid by card, paiement par carte, CB, Visa, Mastercard, carte bancaire).',
-        'Factures means an invoice/bill to pay, often with a QR code, QR-facture, IBAN, payment reference, or bank transfer instructions.',
-        'Do not choose Factures merely because the document is an invoice if the email or OCR says it was paid by card; card-paid receipts are Carte.',
-        'datePaiement must be YYYY-MM-DD or null.',
-        'montantFacture must be a JSON number or null.',
-        'Every accepted attachment ID must appear in exactly one receipt group when decision=create_items.',
+      task: 'Classify receipt/invoice email attachments and return only valid JSON for monday.com item creation.',
+      context: {
+        email: {
+          subject: input.email.subject,
+          receivedDateTime: input.email.receivedDateTime,
+          sender: {
+            name: input.email.sender.name,
+            email: input.email.sender.email,
+          },
+          webLink: input.email.webLink,
+          threadText: input.email.bodyText ?? '',
+        },
+        attachments: attachmentSummaries,
+        ocrDocuments,
+        allowedProvenanceLabels: provenanceLabels,
+        threshold: input.confidenceThreshold,
+      },
+      instructions: [
+        'Use decision=create_items for business uncertainty: return uncertain/missing field statuses and reasons instead of requesting review.',
+        'Use decision=review only when the available content is unreadable or clearly not an invoice/receipt package.',
+        'Every accepted attachment ID must be used in exactly one group when returning create_items.',
+        'When grouping is uncertain, return create_items with one fallback group containing all attachments, low confidence, and uncertain groupingExplanation (do not lose any attachment).',
+        'Item name MUST be a concise French description of what was paid or billed, inferred from email/OCR content: purpose/service + vendor/service + month/period when inferable, e.g. "Abonnement serveur Hetzner juillet".',
+        'Item name MUST NOT include full dates, invoice/reference numbers, or blindly copy the email subject/invoice heading.',
+        'Type de facture MUST be exactly Factures or Carte.',
+        'Carte = invoice/receipt already paid by card or to be debited from a card; treat online-service invoices with wording like paid by card, charged to card, debited from credit card, CB, Visa, Mastercard, Amex, paiement par carte as Carte.',
+        'Factures = bank-transfer invoice to pay; use Factures only when OCR/email shows QR/QR-facture/Swiss QR evidence together with IBAN/QR-IBAN/bank-transfer/bulletin evidence.',
+        'Do not classify as Factures just because the document says invoice/facture, includes an invoice number/reference, payment reference, amount due/open amount, or billing period.',
+        'If there is no QR/QR-facture and no IBAN/QR-IBAN/bank-transfer evidence, online-service invoices should be Carte when card payment/debit evidence appears.',
+        'Date de Paiement rules: for Carte, always extract the actual transaction/payment date when present; for Factures, return null unless the document explicitly contains an already-paid date (e.g., preuve de paiement/reçu).',
+        'Soumis par should default immediately to sender name <sender email> from metadata; only use body evidence if sender metadata is missing or blank.',
+        'Provenance suggérée: pick closest match from allowedProvenanceLabels. If confidence is low, still choose the closest label and set provenanceSuggeree.status=uncertain with a reason.',
+        'When classifying grouped receipts from Physio 7, favor Physio 7 sender metadata/domain/signature signals and branch/location mentions to infer provenance and submitted-by fields.',
       ],
-      schema: {
+      output: {
         decision: 'create_items | review',
-        confidence: 'number 0..1',
-        reviewReason: 'string | null',
-        emailSummary: 'short summary of email content',
+        confidence: '0.0 to 1.0',
+        reviewReason: 'short reason or null',
+        emailSummary: 'short stripped-email summary',
         receiptGroups: [
           {
-            itemName: 'merchant/date/reference style item name',
-            confidence: 'number 0..1',
-            groupingExplanation: 'why files belong together',
-            attachmentIds: ['attachment id'],
-            referenceFacture: 'string | null',
-            montantFacture: 'number | null',
-            datePaiement: 'YYYY-MM-DD | null',
-            typeDeFacture: 'Factures | Carte',
-            notesParticulieres: 'email summary plus receipt-specific notes',
+            itemName: {
+              status: 'confident | uncertain | missing',
+              value: 'descriptive French payment/service title without full date or invoice/reference number, e.g. Abonnement serveur Hetzner juillet',
+              reason: 'required when status is uncertain or missing',
+            },
+            confidence: '0.0 to 1.0',
+            groupingExplanation: {
+              status: 'confident | uncertain | missing',
+              value: 'why files belong together',
+              reason: 'required when status is uncertain or missing',
+            },
+            attachmentIds: ['accepted attachment id'],
+            typeDeFacture: {
+              status: 'confident | uncertain | missing',
+              value: 'Factures | Carte',
+              reason: 'required when status is uncertain or missing',
+            },
+            soumisPar: {
+              status: 'confident | uncertain | missing',
+              value: 'name <email> or fallback',
+              reason: 'required when status is uncertain or missing',
+            },
+            provenanceSuggeree: {
+              status: 'confident | uncertain | missing',
+              value: `one of: ${provenanceLabels.join(' | ')}`,
+              reason: 'required when status is uncertain or missing',
+            },
+            referenceFacture: {
+              status: 'confident | uncertain | missing',
+              value: 'invoice/reference number or null',
+              reason: 'required when status is uncertain or missing',
+            },
+            montantFacture: {
+              status: 'confident | uncertain | missing',
+              value: 'number or null',
+              reason: 'required when status is uncertain or missing',
+            },
+            fournisseur: {
+              status: 'confident | uncertain | missing',
+              value: 'vendor name or null',
+              reason: 'required when status is uncertain or missing',
+            },
+            datePaiement: {
+              status: 'confident | uncertain | missing',
+              value: 'YYYY-MM-DD or null',
+              reason: 'required when status is uncertain or missing',
+            },
+            notesParticulieres: {
+              status: 'confident | uncertain | missing',
+              value: 'short receipt notes',
+              reason: 'required when status is uncertain or missing',
+            },
           },
         ],
       },
-      email: {
-        subject: input.email.subject,
-        receivedDateTime: input.email.receivedDateTime,
-        sender: input.email.sender,
-        bodyText: input.email.bodyText?.slice(0, 4000),
-      },
-      attachments: attachmentSummaries,
-      ocrDocuments,
     },
     null,
     2,

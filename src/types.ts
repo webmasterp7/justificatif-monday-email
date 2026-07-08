@@ -1,5 +1,43 @@
 export type InvoiceType = 'Factures' | 'Carte';
 
+export type ClassificationFieldStatus = 'confident' | 'uncertain' | 'missing';
+
+export const PROVENANCE_SUGGESTIONS = [
+  'Direction',
+  'Préverenges',
+  'Montreux',
+  'Charmilles',
+  'Cornavin',
+  'Renens',
+  'Chailly',
+  'Avant-Poste',
+  'Fribourg',
+  'Formation Med3A',
+  'E-shop',
+  'Formation 4Med',
+  '4MEd',
+  'Med3A',
+] as const;
+
+export type ProvenanceSuggestion = (typeof PROVENANCE_SUGGESTIONS)[number];
+
+export interface ClassifiedField<T> {
+  status: ClassificationFieldStatus;
+  value: T;
+  reason?: string;
+}
+
+export interface ReceiptGroupFieldStatuses {
+  itemName: ClassifiedField<string | null>;
+  typeDeFacture: ClassifiedField<InvoiceType>;
+  soumisPar: ClassifiedField<string | null>;
+  provenanceSuggeree: ClassifiedField<ProvenanceSuggestion | null>;
+  referenceFacture: ClassifiedField<string | null>;
+  montantFacture: ClassifiedField<number | null>;
+  fournisseur: ClassifiedField<string | null>;
+  datePaiement: ClassifiedField<string | null>;
+}
+
 export interface EmailSender {
   name?: string;
   email: string;
@@ -9,7 +47,7 @@ export interface EmailMessage {
   id: string;
   subject: string;
   receivedDateTime: string;
-  webLink: string;
+  webLink?: string;
   sender: EmailSender;
   bodyText?: string;
   hasAttachments: boolean;
@@ -45,6 +83,12 @@ export interface ReceiptGroup {
   datePaiement?: string | null;
   typeDeFacture: InvoiceType;
   notesParticulieres: string;
+
+  soumisPar?: string | null;
+  provenanceSuggeree?: ProvenanceSuggestion | null;
+  fournisseur?: string | null;
+
+  fieldStatuses?: ReceiptGroupFieldStatuses;
 }
 
 export interface ClassificationResult {
@@ -63,6 +107,10 @@ export interface MondayColumnValues {
   notesParticulieres: string;
   soumisPar: string;
   typeDeFacture: InvoiceType;
+  statut: 'Nouveau' | 'Attention';
+  fournisseur?: string;
+  provenanceSuggeree?: ProvenanceSuggestion | null;
+  etatDeFacture: 'Facture Reçue';
 }
 
 export interface MondayItemRequest {
@@ -80,6 +128,11 @@ export interface MondayFileUploadRequest {
 export interface MondayUpdateRequest {
   itemId: string;
   body: string;
+}
+
+export interface MondayStatusUpdateRequest {
+  itemId: string;
+  statut: 'Nouveau' | 'Attention';
 }
 
 export interface WorkflowOutcome {

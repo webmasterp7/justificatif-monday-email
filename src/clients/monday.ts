@@ -1,6 +1,6 @@
 import { MONDAY_COLUMNS } from '../config.js';
 import { buildMondayColumnValues } from '../mondayPayload.js';
-import type { MondayFileUploadRequest, MondayItemRequest, MondayUpdateRequest } from '../types.js';
+import type { MondayFileUploadRequest, MondayItemRequest, MondayStatusUpdateRequest, MondayUpdateRequest } from '../types.js';
 
 export interface MondayClientConfig {
   apiToken: string;
@@ -22,6 +22,10 @@ interface CreateItemResponse {
 
 interface CreateUpdateResponse {
   create_update: { id: string };
+}
+
+interface ChangeColumnValuesResponse {
+  change_multiple_column_values: { id: string };
 }
 
 interface AddFileResponse {
@@ -67,6 +71,24 @@ export class MondayClient {
     });
 
     return response.create_update;
+  }
+
+  async updateItemStatus(request: MondayStatusUpdateRequest): Promise<{ id: string }> {
+    const query = `
+      mutation ChangeReceiptStatus($boardId: ID!, $itemId: ID!, $columnValues: JSON!) {
+        change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) {
+          id
+        }
+      }
+    `;
+
+    const response = await this.graphql<ChangeColumnValuesResponse>(query, {
+      boardId: this.config.boardId,
+      itemId: request.itemId,
+      columnValues: JSON.stringify({ [MONDAY_COLUMNS.statut]: { label: request.statut } }),
+    });
+
+    return response.change_multiple_column_values;
   }
 
   async uploadFile(request: MondayFileUploadRequest): Promise<{ id: string }> {

@@ -22,9 +22,21 @@ export function applyInvoiceTypeEvidence(input: {
       };
     }
 
+    const evidenceType = evidence.card?.type ?? evidence.invoice?.type;
+
     groups.push({
       ...group,
-      typeDeFacture: evidence.card?.type ?? evidence.invoice?.type ?? group.typeDeFacture,
+      typeDeFacture: evidenceType ?? group.typeDeFacture,
+      fieldStatuses: evidenceType && group.fieldStatuses
+        ? {
+            ...group.fieldStatuses,
+            typeDeFacture: {
+              ...group.fieldStatuses.typeDeFacture,
+              status: 'confident',
+              value: evidenceType,
+            },
+          }
+        : group.fieldStatuses,
     });
   }
 
@@ -45,7 +57,9 @@ function buildEvidenceText(email: EmailMessage, ocrDocuments: OcrDocument[], gro
 
 function detectInvoiceTypeEvidence(text: string): { card?: InvoiceTypeEvidenceMatch; invoice?: InvoiceTypeEvidenceMatch } {
   const cardTerms = matchingTerms(text, CARD_PAID_PATTERNS);
-  const invoiceTerms = matchingTerms(text, INVOICE_TO_PAY_PATTERNS);
+  const qrTerms = matchingTerms(text, QR_INVOICE_PATTERNS);
+  const bankTransferTerms = matchingTerms(text, BANK_TRANSFER_PATTERNS);
+  const invoiceTerms = qrTerms.length > 0 && bankTransferTerms.length > 0 ? [...qrTerms, ...bankTransferTerms] : [];
 
   return {
     card: cardTerms.length ? { type: 'Carte', terms: cardTerms } : undefined,
@@ -60,18 +74,23 @@ function matchingTerms(text: string, patterns: Array<{ label: string; pattern: R
 }
 
 const CARD_PAID_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
-  { label: 'paid by card', pattern: /\b(?:paid|payment|charged)\s+(?:by|with|via)\s+(?:credit\s+card|debit\s+card|card)\b/i },
+  { label: 'paid by card', pattern: /\b(?:paid|payment|charged|debited|billed)\s+(?:by|with|via|to|from|on)\s+(?:a\s+)?(?:credit\s+card|debit\s+card|card)\b/i },
+  { label: 'card debit', pattern: /\b(?:debited|charged)\s+(?:from|to|on)\s+(?:your\s+|a\s+)?(?:credit\s+card|debit\s+card|card)\b/i },
+  { label: 'invoice amount debited from card', pattern: /\b(?:invoice|open\s+invoice\s+amount|amount)\b.{0,80}\b(?:debited|charged)\b.{0,60}\b(?:credit\s+card|debit\s+card|card)\b/i },
   { label: 'card payment', pattern: /\b(?:card\s+payment|credit\s+card|debit\s+card)\b/i },
-  { label: 'paiement par carte', pattern: /\b(?:paiement|pay[eé]|r[eè]gl[eé]|d[eé]bit[eé])\s+(?:par|avec|en)?\s*(?:carte|cb)\b/i },
+  { label: 'paiement par carte', pattern: /\b(?:paiement|pay[eé]|r[eè]gl[eé]|d[eé]bit[eé]|pr[eé]lev[eé]|factur[eé])\s+(?:par|avec|en|sur)?\s*(?:carte|cb)\b/i },
   { label: 'carte bancaire', pattern: /\b(?:carte\s+bancaire|carte\s+de\s+cr[eé]dit|carte\s+de\s+d[eé]bit)\b/i },
   { label: 'card network', pattern: /\b(?:cb|visa|mastercard|maestro|amex|american\s+express)\b/i },
 ];
 
-const INVOICE_TO_PAY_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
-  { label: 'QR facture', pattern: /\b(?:qr[-\s]?facture|facture\s+qr|swiss\s+qr)\b/i },
+const QR_INVOICE_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
+  { label: 'QR facture', pattern: /\b(?:qr[-\s]?facture|facture\s+qr|swiss\s+qr|qr\s+bill|swiss\s+qr\s+bill)\b/i },
   { label: 'QR code', pattern: /\bqr\s*code\b/i },
+  { label: 'QR reference', pattern: /\b(?:r[eé]f[eé]rence\s+qr|qr\s+r[eé]f[eé]rence|qr\s+reference)\b/i },
+];
+
+const BANK_TRANSFER_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
+  { label: 'QR-IBAN', pattern: /\bqr[-\s]?iban\b/i },
   { label: 'IBAN', pattern: /\biban\b/i },
-  { label: 'payment reference', pattern: /\b(?:r[eé]f[eé]rence\s+(?:qr|de\s+paiement)|qr\s+r[eé]f[eé]rence|payment\s+reference)\b/i },
-  { label: 'amount to pay', pattern: /\b(?:montant\s+(?:à|a)\s+payer|(?:à|a)\s+payer|amount\s+due)\b/i },
-  { label: 'bank transfer', pattern: /\b(?:virement\s+bancaire|bank\s+transfer|bulletin\s+de\s+versement)\b/i },
+  { label: 'bank transfer', pattern: /\b(?:virement\s+bancaire|bank\s+transfer|wire\s+transfer|bulletin\s+de\s+versement)\b/i },
 ];
