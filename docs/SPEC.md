@@ -32,6 +32,7 @@ Required Graph application permission: `Mail.ReadWrite`, with admin consent. The
 
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
+| `LOG_LEVEL` | no | `debug` | Logging profile: `debug` emits all logs including per-poll traces; `prod` suppresses debug poll/message logs while keeping success, warning, and error logs. |
 | `POLL_INTERVAL_MINUTES` | no | `15` | Mailbox polling interval. |
 | `MAX_MESSAGES_PER_POLL` | no | `10` | Maximum inbox messages to inspect per poll. |
 | `AUTO_CREATE_CONFIDENCE_THRESHOLD` | no | `0.7` | Minimum classifier confidence for normal item creation. |

@@ -81,6 +81,7 @@ MONDAY_BOARD_ID=
 MS_INBOX_FOLDER=Inbox
 MS_PROCESSED_FOLDER=Processed
 MS_REVIEW_FOLDER=Review
+LOG_LEVEL=debug
 POLL_INTERVAL_MINUTES=15
 MAX_MESSAGES_PER_POLL=10
 AUTO_CREATE_CONFIDENCE_THRESHOLD=0.7
@@ -149,3 +150,5 @@ No duplicate suppression exists in the MVP. If the same receipt is forwarded twi
 ### Logs
 
 The MVP has no database. Use Dokploy container logs for traceability. Logs are JSON lines containing message IDs, subjects, sender, route decisions, monday item/update IDs, retry attempts, and error reasons (including final-update success/failure and truncation events).
+
+Set `LOG_LEVEL=prod` in Dokploy to suppress debug-only per-poll/per-message traces. The default `LOG_LEVEL=debug` keeps all logs for development and troubleshooting.

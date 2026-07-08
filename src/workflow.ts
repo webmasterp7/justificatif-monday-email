@@ -41,7 +41,7 @@ export class ReceiptWorkflow {
     const reviewFolderId = await this.graph.resolveFolderId(this.config.microsoft.folders.review);
     const messages = await this.graph.listMessages(inboxFolderId, this.config.polling.maxMessagesPerPoll);
 
-    this.logger.info('Mailbox poll returned messages', { count: messages.length });
+    this.logger.debug('Mailbox poll returned messages', { count: messages.length });
 
     for (const message of messages) {
       await this.processMessage(message, { processedFolderId, reviewFolderId });
@@ -52,7 +52,7 @@ export class ReceiptWorkflow {
     message: EmailMessage,
     folders: { processedFolderId: string; reviewFolderId: string },
   ): Promise<void> {
-    this.logger.info('Processing email message', messageLogContext(message));
+    this.logger.debug('Processing email message', messageLogContext(message));
 
     try {
       const attachments = await this.graph.listAttachments(message.id);

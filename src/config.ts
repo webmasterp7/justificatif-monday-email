@@ -53,6 +53,8 @@ const optionalNonEmptyString = z.preprocess(
 );
 
 const envSchema = z.object({
+  LOG_LEVEL: z.enum(['debug', 'prod']).default('debug'),
+
   MS_TENANT_ID: nonEmptyString,
   MS_CLIENT_ID: nonEmptyString,
   MS_CLIENT_SECRET: nonEmptyString,
@@ -81,6 +83,9 @@ export type RawEnv = z.input<typeof envSchema>;
 export type ParsedEnv = z.output<typeof envSchema>;
 
 export interface AppConfig {
+  logging: {
+    level: ParsedEnv['LOG_LEVEL'];
+  };
   microsoft: {
     tenantId: string;
     clientId: string;
@@ -133,6 +138,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
 
 function mapEnvToConfig(env: ParsedEnv): AppConfig {
   return {
+    logging: {
+      level: env.LOG_LEVEL,
+    },
     microsoft: {
       tenantId: env.MS_TENANT_ID,
       clientId: env.MS_CLIENT_ID,

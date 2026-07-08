@@ -9,6 +9,7 @@ import { ReceiptWorkflow } from '../src/workflow.js';
 import type { AcceptedAttachment, EmailMessage, InvoiceType, ReceiptGroup } from '../src/types.js';
 
 const config: AppConfig = {
+  logging: { level: 'debug' },
   microsoft: {
     tenantId: 'tenant',
     clientId: 'client',

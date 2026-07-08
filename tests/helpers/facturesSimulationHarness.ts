@@ -17,6 +17,7 @@ import { ReceiptWorkflow } from '../../src/workflow.js';
 import type { FacturesEmailFixture } from './facturesFixtureManifest.js';
 
 export const facturesSimulationConfig: AppConfig = {
+  logging: { level: 'debug' },
   microsoft: {
     tenantId: 'tenant',
     clientId: 'client',

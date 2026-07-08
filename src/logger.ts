@@ -1,4 +1,5 @@
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+export type LoggingProfile = 'debug' | 'prod';
 
 export interface LogContext {
   messageId?: string;
@@ -21,9 +22,13 @@ export interface Logger {
   error(message: string, context?: LogContext): void;
 }
 
-export function createLogger(service = 'receipt-monday-email'): Logger {
+export function createLogger(service = 'receipt-monday-email', profile: LoggingProfile = 'debug'): Logger {
   return {
-    debug: (message, context) => writeLog('debug', service, message, context),
+    debug: (message, context) => {
+      if (profile === 'debug') {
+        writeLog('debug', service, message, context);
+      }
+    },
     info: (message, context) => writeLog('info', service, message, context),
     warn: (message, context) => writeLog('warn', service, message, context),
     error: (message, context) => writeLog('error', service, message, context),

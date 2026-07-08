@@ -42,8 +42,39 @@ describe('config constants', () => {
       MONDAY_BOARD_ID: '123',
     });
 
+    expect(config.logging.level).toBe('debug');
     expect(config.monday.columns).toBe(MONDAY_COLUMNS);
     expect(config.microsoft.folders.review).toBe('Review');
     expect(config.mistral.chatModel).toBe('mistral-large-latest');
+  });
+
+  it('accepts prod logging level', () => {
+    const config = loadConfig({
+      LOG_LEVEL: 'prod',
+      MS_TENANT_ID: 'tenant',
+      MS_CLIENT_ID: 'client',
+      MS_CLIENT_SECRET: 'secret',
+      MS_MAILBOX_USER_ID: 'mailbox',
+      MISTRAL_API_KEY: 'mistral',
+      MONDAY_API_TOKEN: 'monday',
+      MONDAY_BOARD_ID: '123',
+    });
+
+    expect(config.logging.level).toBe('prod');
+  });
+
+  it('rejects invalid logging levels', () => {
+    expect(() =>
+      loadConfig({
+        LOG_LEVEL: 'verbose',
+        MS_TENANT_ID: 'tenant',
+        MS_CLIENT_ID: 'client',
+        MS_CLIENT_SECRET: 'secret',
+        MS_MAILBOX_USER_ID: 'mailbox',
+        MISTRAL_API_KEY: 'mistral',
+        MONDAY_API_TOKEN: 'monday',
+        MONDAY_BOARD_ID: '123',
+      }),
+    ).toThrow(/LOG_LEVEL/);
   });
 });
