@@ -21,7 +21,7 @@ export async function retryTransientTimeout<T>(options: TransientRetryOptions<T>
       }
 
       const delayMs = calculateExponentialDelay(options.baseDelayMs, attempt);
-      options.logger.warn('Transient request timeout; retrying', {
+      options.logger.warn('Transient request failure; retrying', {
         step: options.step,
         retryAttempt: attempt,
         maxAttempts: options.maxAttempts,
@@ -54,6 +54,20 @@ function isTransientTimeoutError(error: unknown): boolean {
   }
 
   if (message.includes('timed out') || message.includes('timeout') || message.includes('aborted due to timeout')) {
+    return true;
+  }
+
+  if (/failed:\s*(429|5\d\d)\b/.test(message)) {
+    return true;
+  }
+
+  if (
+    message.includes('econnreset') ||
+    message.includes('etimedout') ||
+    message.includes('eai_again') ||
+    message.includes('socket hang up') ||
+    message.includes('fetch failed')
+  ) {
     return true;
   }
 

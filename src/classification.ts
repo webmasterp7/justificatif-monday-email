@@ -170,10 +170,31 @@ export const classificationResultSchema = z.object({
 
 export type ValidatedClassificationResult = z.infer<typeof classificationResultSchema>;
 
+export class ClassificationParseError extends Error {
+  constructor(
+    message: string,
+    readonly details: string,
+  ) {
+    super(message);
+    this.name = 'ClassificationParseError';
+  }
+}
+
 export function parseClassificationJson(raw: string): ValidatedClassificationResult {
-  const cleaned = extractJson(raw);
-  const parsed = JSON.parse(cleaned) as unknown;
-  return classificationResultSchema.parse(parsed);
+  try {
+    const cleaned = extractJson(raw);
+    const parsed = JSON.parse(cleaned) as unknown;
+    return classificationResultSchema.parse(parsed);
+  } catch (error) {
+    throw new ClassificationParseError(
+      'La réponse du classificateur est invalide ou incomplète.',
+      formatClassificationParseDetails(error),
+    );
+  }
+}
+
+function formatClassificationParseDetails(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function normalizeEnrichedReceiptGroup(raw: z.infer<typeof enrichedReceiptGroupSchema>): ReceiptGroup {

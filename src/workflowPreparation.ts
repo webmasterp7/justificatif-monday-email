@@ -1,7 +1,6 @@
 import type {
   AcceptedAttachment,
   AttachmentDocumentKind,
-  AttachmentGroupingEvidence,
   ClassificationFieldStatus,
   ClassificationResult,
   EmailAttachment,

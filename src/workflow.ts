@@ -13,6 +13,7 @@ import {
   toDateOnly,
   withEmailAutomationNote,
 } from './mondayPayload.js';
+import { formatReviewReason, formatTechnicalError } from './errorFormatting.js';
 import { retryTransientTimeout } from './transientRetry.js';
 import type { AcceptedAttachment, EmailAttachment, EmailMessage, ReceiptGroup } from './types.js';
 import {
@@ -75,7 +76,15 @@ export class ReceiptWorkflow {
       }
 
       const accepted = await Promise.all(
-        acceptedAttachments.map((attachment) => this.graph.getAcceptedAttachment(message.id, attachment.id)),
+        acceptedAttachments.map((attachment) =>
+          retryTransientTimeout({
+            step: `Microsoft Graph attachment download (${attachment.name})`,
+            maxAttempts: this.config.workflow.uploadRetryAttempts,
+            baseDelayMs: this.config.workflow.uploadRetryDelayMs,
+            logger: this.logger,
+            operation: () => this.graph.getAcceptedAttachment(message.id, attachment.id),
+          }),
+        ),
       );
 
       const ocrDocuments = await Promise.all(
@@ -144,15 +153,17 @@ export class ReceiptWorkflow {
 
       await this.processPreparedGroups(message, preparedGroups, accepted, folders.processedFolderId, unsupportedReasons);
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
+      const technicalReason = formatTechnicalError(error);
+      const reviewReason = formatReviewReason(error);
       this.logger.error('Processing failed; routing email to review', {
         ...messageLogContext(message),
         routeDecision: 'review',
-        errorReason: reason,
+        errorReason: technicalReason,
+        reviewReason,
       });
 
       const attachments = await this.safeListAttachments(message.id);
-      await this.routeToReview(message, attachments, reason, folders.reviewFolderId);
+      await this.routeToReview(message, attachments, reviewReason, folders.reviewFolderId, [], technicalReason);
     }
   }
 
@@ -362,6 +373,7 @@ export class ReceiptWorkflow {
     reason: string,
     reviewFolderId: string,
     attentionReasons: string[] = [],
+    technicalReason?: string,
   ): Promise<void> {
     const item = await this.monday.createItem({
       itemName: message.subject || message.id,
@@ -401,7 +413,8 @@ export class ReceiptWorkflow {
     this.logger.warn('Email routed to review', {
       ...messageLogContext(message),
       routeDecision: 'review',
-      errorReason: reason,
+      errorReason: technicalReason ?? reason,
+      ...(technicalReason && technicalReason !== reason ? { reviewReason: reason } : {}),
       mondayItemIds: [item.id],
     });
   }

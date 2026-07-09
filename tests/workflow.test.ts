@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { ClassificationParseError } from '../src/classification.js';
 import type { AppConfig } from '../src/config.js';
 import type { GraphMailClient } from '../src/clients/graph.js';
 import type { MistralReceiptClient } from '../src/clients/mistral.js';
@@ -80,6 +81,8 @@ function makeMocks(overrides: {
   attachmentGroups?: ReceiptGroup[];
   ocrTimeoutCount?: number;
   classificationTimeoutCount?: number;
+  graphAttachmentFailureCount?: number;
+  classificationRejects?: unknown;
 } = {}) {
   const moveMessageResult = {
     ...email,
@@ -87,10 +90,16 @@ function makeMocks(overrides: {
   };
 
   const listAttachments = overrides.attachments ?? [attachment];
+  let graphAttachmentAttempts = 0;
 
   const graph = {
     listAttachments: vi.fn().mockResolvedValue(listAttachments),
     getAcceptedAttachment: vi.fn().mockImplementation((_messageId: string, attachmentId: string) => {
+      graphAttachmentAttempts += 1;
+      if (graphAttachmentAttempts <= (overrides.graphAttachmentFailureCount ?? 0)) {
+        return Promise.reject(new Error('Microsoft Graph GET https://graph.microsoft.com/v1.0/users/mail/messages/m1/attachments/a1 failed: 503 '));
+      }
+
       const source = listAttachments.find((item) => (item as { id: string }).id === attachmentId) as
         | { id: string; name?: string; contentType?: string; size?: number; isInline?: boolean }
         | undefined;
@@ -137,6 +146,9 @@ function makeMocks(overrides: {
   const classifyReceipts = vi.fn();
   for (let attempt = 0; attempt < (overrides.classificationTimeoutCount ?? 0); attempt += 1) {
     classifyReceipts.mockRejectedValueOnce(makeTimeoutError());
+  }
+  if (overrides.classificationRejects) {
+    classifyReceipts.mockRejectedValueOnce(overrides.classificationRejects);
   }
   classifyReceipts.mockResolvedValue({
     decision: overrides.classificationDecision ?? 'create_items',
@@ -301,6 +313,19 @@ describe('ReceiptWorkflow', () => {
     );
     expect(mocks.monday.uploadFile).toHaveBeenCalledTimes(1);
     expect(mocks.graph.moveMessage).toHaveBeenCalledWith(email.id, 'processed-folder');
+  });
+
+  it('retries a transient Microsoft Graph attachment download failure and then processes successfully', async () => {
+    const mocks = makeMocks({ graphAttachmentFailureCount: 1 });
+    const workflow = makeWorkflow(mocks);
+
+    await workflow.processMessage(email, { processedFolderId: 'processed-folder', reviewFolderId: 'review-folder' });
+
+    expect(mocks.graph.getAcceptedAttachment).toHaveBeenCalledTimes(2);
+    expect(mocks.monday.uploadFile).toHaveBeenCalledWith(expect.objectContaining({ itemId: 'item-1' }));
+    expect(mocks.graph.moveMessage).toHaveBeenCalledWith(email.id, 'processed-folder');
+    expect(mocks.graph.moveMessage).not.toHaveBeenCalledWith(email.id, 'review-folder');
+    expect(mocks.monday.updateItemStatus).toHaveBeenCalledWith({ itemId: 'item-1', statut: 'Nouveau' });
   });
 
   it('handles grouping uncertainty by preserving distinct Attention items for supported attachments', async () => {
@@ -510,6 +535,35 @@ describe('ReceiptWorkflow', () => {
     );
     expect(mocks.graph.moveMessage).toHaveBeenCalledWith(email.id, 'review-folder');
     expect(mocks.graph.moveMessage).not.toHaveBeenCalledWith(email.id, 'processed-folder');
+  });
+
+  it('keeps classifier validation details in logs but not monday review text', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const parseError = new ClassificationParseError(
+      'La réponse du classificateur est invalide ou incomplète.',
+      '[{"code":"invalid_union","path":["receiptGroups",0,"provenanceSuggeree"]}]',
+    );
+    const mocks = makeMocks({ classificationRejects: parseError });
+    const workflow = makeWorkflow(mocks);
+
+    await workflow.processMessage(email, { processedFolderId: 'processed-folder', reviewFolderId: 'review-folder' });
+
+    const createItemRequest = mocks.monday.createItem.mock.calls[0]?.[0];
+    const reviewUpdateBody = mocks.monday.createUpdate.mock.calls[0]?.[0].body;
+    const errorLogs = consoleError.mock.calls.map(([line]) => String(line)).join('\n');
+    const warnLogs = consoleWarn.mock.calls.map(([line]) => String(line)).join('\n');
+
+    expect(createItemRequest.columnValues.notesParticulieres).toContain('La réponse du classificateur est invalide ou incomplète.');
+    expect(createItemRequest.columnValues.notesParticulieres).not.toContain('invalid_union');
+    expect(reviewUpdateBody).toContain('La réponse du classificateur est invalide ou incomplète.');
+    expect(reviewUpdateBody).not.toContain('invalid_union');
+    expect(errorLogs).toContain('invalid_union');
+    expect(warnLogs).toContain('invalid_union');
+    expect(mocks.graph.moveMessage).toHaveBeenCalledWith(email.id, 'review-folder');
+
+    consoleError.mockRestore();
+    consoleWarn.mockRestore();
   });
 
   it('routes classifier-decided review to review folder', async () => {
