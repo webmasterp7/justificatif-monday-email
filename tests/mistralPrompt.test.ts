@@ -158,6 +158,10 @@ describe('Mistral classification prompt', () => {
     expect(parsedPrompt.instructions.join(' ')).toContain('Do not classify as Factures just because the document says invoice/facture');
     expect(parsedPrompt.instructions.join(' ')).toContain('no QR/QR-facture and no IBAN/QR-IBAN/bank-transfer evidence');
     expect(parsedPrompt.instructions.join(' ')).toContain('Date de Paiement rules: for Carte, always extract the actual transaction/payment date');
+    expect(parsedPrompt.instructions.join(' ')).toContain('Group by transaction/expense, not by email');
+    expect(parsedPrompt.instructions.join(' ')).toContain('invoice and receipt/proof of payment for the same amount/vendor/reference/service');
+    expect(parsedPrompt.instructions.join(' ')).toContain('Separate unrelated supplier invoices/receipts into separate groups');
+    expect(parsedPrompt.instructions.join(' ')).toContain('Supporting documents such as participant lists');
     expect(parsedPrompt.instructions.join(' ')).toContain('When grouping is uncertain, return create_items with one fallback group');
     expect(parsedPrompt.instructions.join(' ')).toContain('purpose/service + vendor/service + month/period');
     expect(parsedPrompt.instructions.join(' ')).toContain('Abonnement serveur Hetzner juillet');

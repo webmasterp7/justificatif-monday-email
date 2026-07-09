@@ -151,8 +151,12 @@ function makeMocks(overrides: {
     classifyReceipts,
   };
 
+  let createdItemCount = 0;
   const monday = {
-    createItem: vi.fn().mockResolvedValue({ id: 'item-1', name: 'Item' }),
+    createItem: vi.fn().mockImplementation((request: { itemName: string }) => {
+      createdItemCount += 1;
+      return Promise.resolve({ id: `item-${createdItemCount}`, name: request.itemName });
+    }),
     uploadFile: overrides.uploadRejects
       ? vi.fn().mockRejectedValue(new Error('upload failed'))
       : vi.fn().mockResolvedValue({ id: 'asset-1' }),
@@ -299,7 +303,7 @@ describe('ReceiptWorkflow', () => {
     expect(mocks.graph.moveMessage).toHaveBeenCalledWith(email.id, 'processed-folder');
   });
 
-  it('handles grouping uncertainty by creating one Attention item for all supported attachments', async () => {
+  it('handles grouping uncertainty by preserving distinct Attention items for supported attachments', async () => {
     const secondAttachment = {
       id: 'attachment-2',
       name: 'receipt-2.pdf',
@@ -340,14 +344,91 @@ describe('ReceiptWorkflow', () => {
     const workflow = makeWorkflow(mocks);
     await workflow.processMessage(email, { processedFolderId: 'processed-folder', reviewFolderId: 'review-folder' });
 
-    expect(mocks.monday.createItem).toHaveBeenCalledTimes(1);
+    expect(mocks.monday.createItem).toHaveBeenCalledTimes(2);
     expect(mocks.monday.createItem).toHaveBeenCalledWith(
       expect.objectContaining({
+        itemName: 'Receipt A',
         columnValues: expect.objectContaining({ statut: 'Attention' }),
       }),
     );
-    expect(mocks.monday.uploadFile).toHaveBeenCalled();
+    expect(mocks.monday.createItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        itemName: 'Receipt B',
+        columnValues: expect.objectContaining({ statut: 'Attention' }),
+      }),
+    );
+    expect(mocks.monday.uploadFile).toHaveBeenCalledWith(expect.objectContaining({ itemId: 'item-1', fileName: 'receipt.pdf' }));
+    expect(mocks.monday.uploadFile).toHaveBeenCalledWith(expect.objectContaining({ itemId: 'item-2', fileName: 'receipt-2.pdf' }));
     expect(mocks.graph.moveMessage).toHaveBeenCalledWith(email.id, 'processed-folder');
+  });
+
+  it('separates unrelated invoices and isolates an unassigned supporting attachment', async () => {
+    const camilleAttachment = {
+      ...attachment,
+      id: 'camille',
+      name: 'Facture Camille.pdf',
+    };
+    const anatoleAttachment = {
+      ...attachment,
+      id: 'anatole',
+      name: 'Facture Anatole.pdf',
+    };
+    const presenceAttachment = {
+      ...attachment,
+      id: 'presence',
+      name: 'Liste participants - présence.pdf',
+    };
+
+    const mocks = makeMocks({
+      attachments: [camilleAttachment, anatoleAttachment, presenceAttachment],
+      attachmentGroups: [
+        {
+          itemName: 'Installation et rangement Lower Body Camille',
+          confidence: 0.9,
+          groupingExplanation: 'Facture Camille uniquement',
+          attachmentIds: ['camille'],
+          referenceFacture: null,
+          montantFacture: 200,
+          datePaiement: null,
+          typeDeFacture: 'Factures',
+          notesParticulieres: 'Facture Camille',
+        },
+        {
+          itemName: 'Accueil Lower Body Anatole',
+          confidence: 0.9,
+          groupingExplanation: 'Facture Anatole uniquement',
+          attachmentIds: ['anatole'],
+          referenceFacture: null,
+          montantFacture: 341.2,
+          datePaiement: null,
+          typeDeFacture: 'Factures',
+          notesParticulieres: 'Facture Anatole',
+        },
+      ],
+    });
+
+    const workflow = makeWorkflow(mocks);
+    await workflow.processMessage(email, { processedFolderId: 'processed-folder', reviewFolderId: 'review-folder' });
+
+    expect(mocks.monday.createItem).toHaveBeenCalledTimes(3);
+    expect(mocks.monday.createItem).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ itemName: 'Installation et rangement Lower Body Camille' }),
+    );
+    expect(mocks.monday.createItem).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ itemName: 'Accueil Lower Body Anatole' }),
+    );
+    expect(mocks.monday.createItem).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        itemName: 'Pièces jointes à assigner',
+        columnValues: expect.objectContaining({ statut: 'Attention' }),
+      }),
+    );
+    expect(mocks.monday.uploadFile).toHaveBeenCalledWith(expect.objectContaining({ itemId: 'item-1', fileName: 'Facture Camille.pdf' }));
+    expect(mocks.monday.uploadFile).toHaveBeenCalledWith(expect.objectContaining({ itemId: 'item-2', fileName: 'Facture Anatole.pdf' }));
+    expect(mocks.monday.uploadFile).toHaveBeenCalledWith(expect.objectContaining({ itemId: 'item-3', fileName: 'Liste participants - présence.pdf' }));
   });
 
   it('routes upload failures to review/error after final review item creation', async () => {

@@ -39,13 +39,13 @@ function group(overrides: Partial<ReceiptGroup> = {}): ReceiptGroup {
   };
 }
 
-function classification(receiptGroup: ReceiptGroup): ClassificationResult {
+function classification(receiptGroup: ReceiptGroup | ReceiptGroup[]): ClassificationResult {
   return {
     decision: 'create_items',
     confidence: 0.95,
     reviewReason: null,
     emailSummary: 'summary',
-    receiptGroups: [receiptGroup],
+    receiptGroups: Array.isArray(receiptGroup) ? receiptGroup : [receiptGroup],
   };
 }
 
@@ -117,5 +117,59 @@ describe('workflow group preparation', () => {
 
     expect(prepared[0]?.statut).toBe('Attention');
     expect(prepared[0]?.attentionReasons).toContain('Provenance suggérée incertain: Closest site label');
+  });
+
+  it('preserves distinct transaction groups even when group confidence needs Attention', () => {
+    const secondAttachment: AcceptedAttachment = { ...attachment, id: 'a2', name: 'invoice-2.pdf' };
+    const firstGroup = group({ attachmentIds: ['a1'], itemName: 'Facture Camille', confidence: 0.6 });
+    const secondGroup = group({ attachmentIds: ['a2'], itemName: 'Facture Anatole', referenceFacture: 'INV-2' });
+
+    const prepared = buildPreparedReceiptGroups(classification([firstGroup, secondGroup]), 0.7, {
+      acceptedAttachments: [attachment, secondAttachment],
+      unsupportedReasons: [],
+      groupingReasons: ['Confiance du groupe "Facture Camille" inférieure au seuil'],
+    });
+
+    expect(prepared).toHaveLength(2);
+    expect(prepared.map((preparedGroup) => preparedGroup.group.itemName)).toEqual(['Facture Camille', 'Facture Anatole']);
+    expect(prepared[0]?.statut).toBe('Attention');
+    expect(prepared[1]?.statut).toBe('Nouveau');
+  });
+
+  it('creates a separate Attention group for unassigned accepted attachments', () => {
+    const supportAttachment: AcceptedAttachment = { ...attachment, id: 'a2', name: 'liste-presence.pdf' };
+
+    const prepared = buildPreparedReceiptGroups(classification(group()), 0.7, {
+      acceptedAttachments: [attachment, supportAttachment],
+      unsupportedReasons: [],
+      groupingReasons: ['Toutes les pièces jointes acceptées n\'ont pas été assignées'],
+    });
+
+    expect(prepared).toHaveLength(2);
+    expect(prepared[0]?.group.attachmentIds).toEqual(['a1']);
+    expect(prepared[0]?.statut).toBe('Nouveau');
+    expect(prepared[1]?.group.itemName).toBe('Pièces jointes à assigner');
+    expect(prepared[1]?.group.attachmentIds).toEqual(['a2']);
+    expect(prepared[1]?.statut).toBe('Attention');
+    expect(prepared[1]?.attentionReasons).toContain('Toutes les pièces jointes acceptées n\'ont pas été assignées');
+  });
+
+  it('keeps invoice and proof of payment together when assigned to the same transaction group', () => {
+    const proofAttachment: AcceptedAttachment = { ...attachment, id: 'a2', name: 'preuve-paiement.pdf' };
+    const transactionGroup = group({
+      attachmentIds: ['a1', 'a2'],
+      itemName: 'Fournisseur facture et paiement',
+      groupingExplanation: 'Même fournisseur, même référence et même montant',
+    });
+
+    const prepared = buildPreparedReceiptGroups(classification(transactionGroup), 0.7, {
+      acceptedAttachments: [attachment, proofAttachment],
+      unsupportedReasons: [],
+      groupingReasons: [],
+    });
+
+    expect(prepared).toHaveLength(1);
+    expect(prepared[0]?.group.attachmentIds).toEqual(['a1', 'a2']);
+    expect(prepared[0]?.statut).toBe('Nouveau');
   });
 });

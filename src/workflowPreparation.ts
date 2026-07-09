@@ -63,7 +63,9 @@ export function buildPreparedReceiptGroups(
     groupingReasons: string[];
   },
 ): PreparedGroup[] {
-  if (context.groupingReasons.length > 0) {
+  const assignment = analyzeAttachmentAssignments(classification, context.acceptedAttachments);
+
+  if (classification.receiptGroups.length === 0 || assignment.duplicateIds.length > 0 || assignment.unknownIds.length > 0) {
     const consolidated = buildConsolidatedAttentionGroup(classification, context.acceptedAttachments);
     return [
       {
@@ -78,8 +80,10 @@ export function buildPreparedReceiptGroups(
     ];
   }
 
-  return classification.receiptGroups.map((group) => {
+  const globalReasons = context.groupingReasons.filter((reason) => reason.startsWith('Confiance globale'));
+  const preparedGroups = classification.receiptGroups.map((group) => {
     const reasons = uniqueReasons([
+      ...globalReasons,
       ...consolidateGroupReasons(group, threshold),
       ...context.unsupportedReasons,
     ]);
@@ -90,6 +94,20 @@ export function buildPreparedReceiptGroups(
       attentionReasons: reasons,
     } satisfies PreparedGroup;
   });
+
+  if (assignment.unassignedAttachments.length > 0) {
+    preparedGroups.push({
+      group: buildUnassignedAttentionGroup(classification, assignment.unassignedAttachments),
+      statut: 'Attention',
+      attentionReasons: uniqueReasons([
+        'Toutes les pièces jointes acceptées n\'ont pas été assignées',
+        ...globalReasons,
+        ...context.unsupportedReasons,
+      ]),
+    });
+  }
+
+  return preparedGroups;
 }
 
 export function buildAttentionOnlyGroupsForBodyOnly(subject: string): PreparedGroup[] {
@@ -156,6 +174,49 @@ export function buildFallbackAttentionGroups(subject: string, reasons: string[])
 
 export function filterUnsupportedReasons(unsupported: EmailAttachment[]): string[] {
   return buildUnsupportedReasons(unsupported);
+}
+
+function analyzeAttachmentAssignments(
+  classification: ClassificationResult,
+  acceptedAttachments: AcceptedAttachment[],
+): {
+  duplicateIds: string[];
+  unknownIds: string[];
+  unassignedAttachments: AcceptedAttachment[];
+} {
+  const acceptedIds = new Set(acceptedAttachments.map((attachment) => attachment.id));
+  const assignedCounts = new Map<string, number>();
+
+  for (const group of classification.receiptGroups) {
+    for (const attachmentId of group.attachmentIds) {
+      assignedCounts.set(attachmentId, (assignedCounts.get(attachmentId) ?? 0) + 1);
+    }
+  }
+
+  const duplicateIds = [...assignedCounts.entries()]
+    .filter(([, count]) => count > 1)
+    .map(([attachmentId]) => attachmentId);
+  const unknownIds = [...assignedCounts.keys()].filter((attachmentId) => !acceptedIds.has(attachmentId));
+  const unassignedAttachments = acceptedAttachments.filter((attachment) => !assignedCounts.has(attachment.id));
+
+  return { duplicateIds, unknownIds, unassignedAttachments };
+}
+
+function buildUnassignedAttentionGroup(
+  classification: ClassificationResult,
+  attachments: AcceptedAttachment[],
+): ReceiptGroup {
+  return {
+    itemName: 'Pièces jointes à assigner',
+    confidence: Math.min(classification.confidence, 0.5),
+    groupingExplanation: 'Pièces jointes acceptées non assignées à un justificatif précis',
+    attachmentIds: attachments.map((attachment) => attachment.id),
+    referenceFacture: null,
+    montantFacture: null,
+    datePaiement: null,
+    typeDeFacture: 'Factures',
+    notesParticulieres: `Pièces jointes acceptées à vérifier et assigner manuellement: ${attachments.map((attachment) => attachment.name).join(', ')}`,
+  };
 }
 
 function buildConsolidatedAttentionGroup(
