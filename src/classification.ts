@@ -6,6 +6,7 @@ import {
   type ClassificationFieldStatus,
   type ClassifiedField,
   type InvoiceType,
+  type ProvenanceSuggestion,
   type ReceiptGroup,
   type ReceiptGroupFieldStatuses,
 } from './types.js';
@@ -76,10 +77,9 @@ const statusReason = z.preprocess(
   z.string().trim().min(1).nullable().optional(),
 );
 
-const provenanceSuggestion = z.enum(PROVENANCE_SUGGESTIONS);
 const nullableProvenanceSuggestion = z.preprocess(
   (value) => (value === '' ? null : value),
-  z.union([provenanceSuggestion, z.null()]),
+  z.union([z.string().trim().min(1), z.null()]),
 );
 
 const fieldEnvelope = <T extends z.ZodTypeAny>(valueSchema: T) =>
@@ -201,7 +201,7 @@ function normalizeEnrichedReceiptGroup(raw: z.infer<typeof enrichedReceiptGroupS
   const itemName = normalizeRequiredField(raw.itemName, 'Réception à vérifier');
   const groupingExplanation = normalizeRequiredField(raw.groupingExplanation, 'Classification incomplète');
   const typeDeFacture = normalizeRequiredField<InvoiceType>(raw.typeDeFacture, 'Factures');
-  const provenanceSuggeree = normalizeField(raw.provenanceSuggeree, null);
+  const provenanceSuggeree = normalizeProvenanceField(raw.provenanceSuggeree);
   const soumisPar = normalizeField(raw.soumisPar, null);
   const referenceFacture = normalizeField(raw.referenceFacture, null);
   const montantFacture = normalizeField(raw.montantFacture, null);
@@ -254,6 +254,30 @@ function normalizeEnrichedReceiptGroup(raw: z.infer<typeof enrichedReceiptGroupS
     groupingEvidence: normalizeGroupingEvidence(raw.groupingEvidence),
     fieldStatuses,
   };
+}
+
+function normalizeProvenanceField(
+  raw: { status: ClassificationFieldStatus; value: string | null; reason?: string | null },
+): ClassifiedField<ProvenanceSuggestion | null> {
+  const field = normalizeField(raw, null);
+
+  if (!field.value) {
+    return { status: field.status, value: null, reason: field.reason };
+  }
+
+  if (isProvenanceSuggestion(field.value)) {
+    return { status: field.status, value: field.value, reason: field.reason };
+  }
+
+  return {
+    status: 'uncertain',
+    value: null,
+    reason: [field.reason, `Valeur proposée non reconnue: ${field.value}`].filter(Boolean).join(' '),
+  };
+}
+
+function isProvenanceSuggestion(value: string): value is ProvenanceSuggestion {
+  return (PROVENANCE_SUGGESTIONS as readonly string[]).includes(value);
 }
 
 function normalizeLegacyReceiptGroup(raw: z.infer<typeof legacyReceiptGroupSchema>): ReceiptGroup {

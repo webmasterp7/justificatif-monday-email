@@ -132,6 +132,35 @@ describe('classification parsing', () => {
       { attachmentId: 'a2', provider: 'Merchant', service: 'Subscription', documentKind: 'payment_proof', reason: 'Payment confirmation' },
     ]);
   });
+
+  it('tolerates unknown provenance labels as attention-ready uncertainty instead of rejecting the classification', () => {
+    const parsed = parseClassificationJson(`{
+      "decision": "create_items",
+      "confidence": 0.93,
+      "emailSummary": "Receipt email",
+      "receiptGroups": [{
+        "itemName": {"status": "confident", "value": "Receipt from sender"},
+        "confidence": 0.93,
+        "groupingExplanation": {"status": "confident", "value": "single PDF"},
+        "attachmentIds": ["a1"],
+        "referenceFacture": {"status": "confident", "value": "INV-1"},
+        "montantFacture": {"status": "confident", "value": 99.5},
+        "datePaiement": {"status": "confident", "value": null},
+        "typeDeFacture": {"status": "confident", "value": "Factures"},
+        "notesParticulieres": {"status": "confident", "value": "Email summary"},
+        "provenanceSuggeree": {"status": "confident", "value": "Physio 7"},
+        "soumisPar": {"status": "confident", "value": "Alice <alice@ex.com>"},
+        "fournisseur": {"status": "confident", "value": "Merchant"}
+      }]
+    }`);
+
+    expect(parsed.receiptGroups[0]?.provenanceSuggeree).toBeNull();
+    expect(parsed.receiptGroups[0]?.fieldStatuses?.provenanceSuggeree).toEqual({
+      status: 'uncertain',
+      value: null,
+      reason: 'Valeur proposée non reconnue: Physio 7',
+    });
+  });
 });
 
 describe('monday payloads', () => {
