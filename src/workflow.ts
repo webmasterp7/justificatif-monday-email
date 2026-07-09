@@ -13,6 +13,7 @@ import {
   toDateOnly,
   withEmailAutomationNote,
 } from './mondayPayload.js';
+import { retryTransientTimeout } from './transientRetry.js';
 import type { AcceptedAttachment, EmailAttachment, EmailMessage, ReceiptGroup } from './types.js';
 import {
   buildAttentionOnlyGroupsForBodyOnly,
@@ -77,13 +78,30 @@ export class ReceiptWorkflow {
         acceptedAttachments.map((attachment) => this.graph.getAcceptedAttachment(message.id, attachment.id)),
       );
 
-      const ocrDocuments = await Promise.all(accepted.map((attachment) => this.mistral.ocrAttachment(attachment)));
+      const ocrDocuments = await Promise.all(
+        accepted.map((attachment) =>
+          retryTransientTimeout({
+            step: `Mistral OCR (${attachment.name})`,
+            maxAttempts: this.config.workflow.uploadRetryAttempts,
+            baseDelayMs: this.config.workflow.uploadRetryDelayMs,
+            logger: this.logger,
+            operation: () => this.mistral.ocrAttachment(attachment),
+          }),
+        ),
+      );
 
-      const classification = await this.mistral.classifyReceipts({
-        email: message,
-        attachments: accepted,
-        ocrDocuments,
-        confidenceThreshold: this.config.workflow.autoCreateConfidenceThreshold,
+      const classification = await retryTransientTimeout({
+        step: 'Mistral classification',
+        maxAttempts: this.config.workflow.uploadRetryAttempts,
+        baseDelayMs: this.config.workflow.uploadRetryDelayMs,
+        logger: this.logger,
+        operation: () =>
+          this.mistral.classifyReceipts({
+            email: message,
+            attachments: accepted,
+            ocrDocuments,
+            confidenceThreshold: this.config.workflow.autoCreateConfidenceThreshold,
+          }),
       });
 
       if (classification.decision === 'review') {

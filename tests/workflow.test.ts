@@ -78,6 +78,8 @@ function makeMocks(overrides: {
   rejectAttentionUpdate?: boolean;
   reviewReason?: string;
   attachmentGroups?: ReceiptGroup[];
+  ocrTimeoutCount?: number;
+  classificationTimeoutCount?: number;
 } = {}) {
   const moveMessageResult = {
     ...email,
@@ -121,20 +123,32 @@ function makeMocks(overrides: {
       },
     ];
 
+  const ocrAttachment = vi.fn();
+  for (let attempt = 0; attempt < (overrides.ocrTimeoutCount ?? 0); attempt += 1) {
+    ocrAttachment.mockRejectedValueOnce(makeTimeoutError());
+  }
+  ocrAttachment.mockResolvedValue({
+    attachmentId: attachment.id,
+    fileName: attachment.name,
+    markdown: overrides.ocrMarkdown ?? 'Receipt total 10 EUR',
+    pageCount: 1,
+  });
+
+  const classifyReceipts = vi.fn();
+  for (let attempt = 0; attempt < (overrides.classificationTimeoutCount ?? 0); attempt += 1) {
+    classifyReceipts.mockRejectedValueOnce(makeTimeoutError());
+  }
+  classifyReceipts.mockResolvedValue({
+    decision: overrides.classificationDecision ?? 'create_items',
+    confidence: overrides.groupConfidence ?? 0.9,
+    emailSummary: 'Receipt email summary',
+    reviewReason: overrides.reviewReason ?? null,
+    receiptGroups: attachmentGroups,
+  });
+
   const mistral = {
-    ocrAttachment: vi.fn().mockResolvedValue({
-      attachmentId: attachment.id,
-      fileName: attachment.name,
-      markdown: overrides.ocrMarkdown ?? 'Receipt total 10 EUR',
-      pageCount: 1,
-    }),
-    classifyReceipts: vi.fn().mockResolvedValue({
-      decision: overrides.classificationDecision ?? 'create_items',
-      confidence: overrides.groupConfidence ?? 0.9,
-      emailSummary: 'Receipt email summary',
-      reviewReason: overrides.reviewReason ?? null,
-      receiptGroups: attachmentGroups,
-    }),
+    ocrAttachment,
+    classifyReceipts,
   };
 
   const monday = {
@@ -163,6 +177,12 @@ function makeWorkflow(mocks: ReturnType<typeof makeMocks>): ReceiptWorkflow {
     mocks.monday as unknown as MondayClient,
     createLogger('test'),
   );
+}
+
+function makeTimeoutError(): Error {
+  const error = new Error('Request timed out: TimeoutError: The operation was aborted due to timeout');
+  error.name = 'TimeoutError';
+  return error;
 }
 
 describe('ReceiptWorkflow', () => {
@@ -368,6 +388,48 @@ describe('ReceiptWorkflow', () => {
     expect(mocks.monday.createUpdate.mock.calls[0]?.[0].body).not.toContain('Attention:');
     expect(mocks.monday.createUpdate.mock.calls.slice(1).every(([request]) => request.body.includes('Points d’attention'))).toBe(true);
     expect(mocks.monday.updateItemStatus).not.toHaveBeenCalled();
+  });
+
+  it('retries a transient Mistral OCR timeout and then processes successfully', async () => {
+    const mocks = makeMocks({ ocrTimeoutCount: 1 });
+    const workflow = makeWorkflow(mocks);
+
+    await workflow.processMessage(email, { processedFolderId: 'processed-folder', reviewFolderId: 'review-folder' });
+
+    expect(mocks.mistral.ocrAttachment).toHaveBeenCalledTimes(2);
+    expect(mocks.mistral.classifyReceipts).toHaveBeenCalledTimes(1);
+    expect(mocks.graph.moveMessage).toHaveBeenCalledWith(email.id, 'processed-folder');
+    expect(mocks.graph.moveMessage).not.toHaveBeenCalledWith(email.id, 'review-folder');
+    expect(mocks.monday.updateItemStatus).toHaveBeenCalledWith({ itemId: 'item-1', statut: 'Nouveau' });
+  });
+
+  it('retries a transient Mistral classification timeout and then processes successfully', async () => {
+    const mocks = makeMocks({ classificationTimeoutCount: 1 });
+    const workflow = makeWorkflow(mocks);
+
+    await workflow.processMessage(email, { processedFolderId: 'processed-folder', reviewFolderId: 'review-folder' });
+
+    expect(mocks.mistral.ocrAttachment).toHaveBeenCalledTimes(1);
+    expect(mocks.mistral.classifyReceipts).toHaveBeenCalledTimes(2);
+    expect(mocks.graph.moveMessage).toHaveBeenCalledWith(email.id, 'processed-folder');
+    expect(mocks.graph.moveMessage).not.toHaveBeenCalledWith(email.id, 'review-folder');
+    expect(mocks.monday.updateItemStatus).toHaveBeenCalledWith({ itemId: 'item-1', statut: 'Nouveau' });
+  });
+
+  it('routes to review after exhausting transient Mistral classification timeout retries', async () => {
+    const mocks = makeMocks({ classificationTimeoutCount: config.workflow.uploadRetryAttempts });
+    const workflow = makeWorkflow(mocks);
+
+    await workflow.processMessage(email, { processedFolderId: 'processed-folder', reviewFolderId: 'review-folder' });
+
+    expect(mocks.mistral.classifyReceipts).toHaveBeenCalledTimes(config.workflow.uploadRetryAttempts);
+    expect(mocks.monday.createItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        itemName: email.subject,
+      }),
+    );
+    expect(mocks.graph.moveMessage).toHaveBeenCalledWith(email.id, 'review-folder');
+    expect(mocks.graph.moveMessage).not.toHaveBeenCalledWith(email.id, 'processed-folder');
   });
 
   it('routes classifier-decided review to review folder', async () => {
