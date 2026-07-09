@@ -154,12 +154,61 @@ describe('workflow group preparation', () => {
     expect(prepared[1]?.attentionReasons).toContain('Toutes les pièces jointes acceptées n\'ont pas été assignées');
   });
 
-  it('keeps invoice and proof of payment together when assigned to the same transaction group', () => {
+  it('splits two invoices with different providers into separate Attention groups', () => {
+    const secondAttachment: AcceptedAttachment = { ...attachment, id: 'a2', name: 'Facture Anatole.pdf' };
+    const invalidGroup = group({
+      attachmentIds: ['a1', 'a2'],
+      itemName: 'Frais logistique formation Lower Body juin',
+      groupingEvidence: [
+        { attachmentId: 'a1', provider: 'Camille Aubaniac', service: 'Installation Lower Body', documentKind: 'invoice' },
+        { attachmentId: 'a2', provider: 'Béhague Anatole', service: 'Accueil Lower Body', documentKind: 'invoice' },
+      ],
+    });
+
+    const prepared = buildPreparedReceiptGroups(classification(invalidGroup), 0.7, {
+      acceptedAttachments: [attachment, secondAttachment],
+      unsupportedReasons: [],
+      groupingReasons: [],
+    });
+
+    expect(prepared).toHaveLength(2);
+    expect(prepared.map((preparedGroup) => preparedGroup.group.attachmentIds)).toEqual([['a1'], ['a2']]);
+    expect(prepared.every((preparedGroup) => preparedGroup.statut === 'Attention')).toBe(true);
+    expect(prepared[0]?.attentionReasons).toContain('Regroupement invalide: fournisseurs différents ou manquants');
+  });
+
+  it('splits two invoices with the same provider and service because document kind is duplicated', () => {
+    const secondAttachment: AcceptedAttachment = { ...attachment, id: 'a2', name: 'invoice-2.pdf' };
+    const invalidGroup = group({
+      attachmentIds: ['a1', 'a2'],
+      itemName: 'Deux factures fournisseur',
+      groupingEvidence: [
+        { attachmentId: 'a1', provider: 'Fournisseur SA', service: 'Abonnement', documentKind: 'invoice' },
+        { attachmentId: 'a2', provider: 'Fournisseur SA', service: 'Abonnement', documentKind: 'invoice' },
+      ],
+    });
+
+    const prepared = buildPreparedReceiptGroups(classification(invalidGroup), 0.7, {
+      acceptedAttachments: [attachment, secondAttachment],
+      unsupportedReasons: [],
+      groupingReasons: [],
+    });
+
+    expect(prepared).toHaveLength(2);
+    expect(prepared.map((preparedGroup) => preparedGroup.group.attachmentIds)).toEqual([['a1'], ['a2']]);
+    expect(prepared[0]?.attentionReasons).toContain('Regroupement invalide: plusieurs pièces jointes ont le même type de document');
+  });
+
+  it('keeps invoice and proof of payment together when provider and service match with different document kinds', () => {
     const proofAttachment: AcceptedAttachment = { ...attachment, id: 'a2', name: 'preuve-paiement.pdf' };
     const transactionGroup = group({
       attachmentIds: ['a1', 'a2'],
       itemName: 'Fournisseur facture et paiement',
-      groupingExplanation: 'Même fournisseur, même référence et même montant',
+      groupingExplanation: 'Même fournisseur, même service et types de document différents',
+      groupingEvidence: [
+        { attachmentId: 'a1', provider: 'Fournisseur SA', service: 'Abonnement', documentKind: 'invoice' },
+        { attachmentId: 'a2', provider: 'Fournisseur SA', service: 'Abonnement', documentKind: 'payment_proof' },
+      ],
     });
 
     const prepared = buildPreparedReceiptGroups(classification(transactionGroup), 0.7, {

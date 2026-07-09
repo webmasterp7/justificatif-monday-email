@@ -383,26 +383,19 @@ describe('ReceiptWorkflow', () => {
       attachments: [camilleAttachment, anatoleAttachment, presenceAttachment],
       attachmentGroups: [
         {
-          itemName: 'Installation et rangement Lower Body Camille',
+          itemName: 'Frais logistique formation Lower Body juin',
           confidence: 0.9,
-          groupingExplanation: 'Facture Camille uniquement',
-          attachmentIds: ['camille'],
+          groupingExplanation: 'Factures liées à la même formation',
+          attachmentIds: ['camille', 'anatole'],
           referenceFacture: null,
           montantFacture: 200,
           datePaiement: null,
           typeDeFacture: 'Factures',
-          notesParticulieres: 'Facture Camille',
-        },
-        {
-          itemName: 'Accueil Lower Body Anatole',
-          confidence: 0.9,
-          groupingExplanation: 'Facture Anatole uniquement',
-          attachmentIds: ['anatole'],
-          referenceFacture: null,
-          montantFacture: 341.2,
-          datePaiement: null,
-          typeDeFacture: 'Factures',
-          notesParticulieres: 'Facture Anatole',
+          notesParticulieres: 'Deux factures temporaires',
+          groupingEvidence: [
+            { attachmentId: 'camille', provider: 'Camille Aubaniac', service: 'Installation Lower Body', documentKind: 'invoice' },
+            { attachmentId: 'anatole', provider: 'Béhague Anatole', service: 'Accueil Lower Body', documentKind: 'invoice' },
+          ],
         },
       ],
     });
@@ -413,11 +406,17 @@ describe('ReceiptWorkflow', () => {
     expect(mocks.monday.createItem).toHaveBeenCalledTimes(3);
     expect(mocks.monday.createItem).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ itemName: 'Installation et rangement Lower Body Camille' }),
+      expect.objectContaining({
+        itemName: 'À vérifier - Facture Camille',
+        columnValues: expect.objectContaining({ statut: 'Attention' }),
+      }),
     );
     expect(mocks.monday.createItem).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({ itemName: 'Accueil Lower Body Anatole' }),
+      expect.objectContaining({
+        itemName: 'À vérifier - Facture Anatole',
+        columnValues: expect.objectContaining({ statut: 'Attention' }),
+      }),
     );
     expect(mocks.monday.createItem).toHaveBeenNthCalledWith(
       3,

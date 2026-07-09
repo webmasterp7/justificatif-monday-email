@@ -72,6 +72,7 @@ export function makeReceiptGroup(
     soumisPar: input.soumisPar ?? 'Sender Name <sender@example.com>',
     provenanceSuggeree: input.provenanceSuggeree,
     fournisseur: input.fournisseur,
+    groupingEvidence: input.groupingEvidence,
     fieldStatuses: input.fieldStatuses,
   };
 }

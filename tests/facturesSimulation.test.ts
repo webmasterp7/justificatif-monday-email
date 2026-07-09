@@ -347,11 +347,11 @@ describe('Factures workflow deterministic simulation scenarios', () => {
     expect(monday.updateItemStatus).toHaveBeenCalledWith({ itemId: 'item-2', statut: 'Nouveau' });
   });
 
-  it('creates one grouped item for payment receipt with multiple invoices', async () => {
+  it('creates one grouped item for an invoice with matching payment proof', async () => {
     const email = makeSeedEmail(paymentSeed);
     const attachments = [
-      syntheticAttachment(`${email.id}-pay-a`, 'payment-1.pdf'),
-      syntheticAttachment(`${email.id}-pay-b`, 'payment-2.pdf'),
+      syntheticAttachment(`${email.id}-pay-a`, 'invoice.pdf'),
+      syntheticAttachment(`${email.id}-pay-b`, 'payment-proof.pdf'),
     ];
 
     const fixture: FacturesEmailFixture = {
@@ -368,6 +368,10 @@ describe('Factures workflow deterministic simulation scenarios', () => {
             montantFacture: 72.8,
             datePaiement: '2026-04-30',
             typeDeFacture: 'Carte',
+            groupingEvidence: [
+              { attachmentId: attachments[0]!.id, provider: 'Mistral AI SAS', service: 'API usage', documentKind: 'invoice' },
+              { attachmentId: attachments[1]!.id, provider: 'Mistral AI SAS', service: 'API usage', documentKind: 'payment_proof' },
+            ],
           }),
         ],
       }),

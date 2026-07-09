@@ -86,6 +86,7 @@ describe('classification parsing', () => {
     expect(parsed.receiptGroups[0]?.montantFacture).toBe(123.45);
     expect(parsed.receiptGroups[0]?.datePaiement).toBe('2026-06-22');
     expect(parsed.receiptGroups[0]?.typeDeFacture).toBe('Factures');
+    expect(parsed.receiptGroups[0]?.groupingEvidence).toBeUndefined();
     expect(parsed.receiptGroups[0]?.fieldStatuses).toMatchObject({
       itemName: { status: 'confident', value: 'Merchant 2026-06-22' },
       referenceFacture: { status: 'confident', value: 'INV-1' },
@@ -109,7 +110,11 @@ describe('classification parsing', () => {
         "notesParticulieres": {"status": "confident", "value": "Email summary"},
         "provenanceSuggeree": {"status": "confident", "value": "Direction"},
         "soumisPar": {"status": "confident", "value": "Alice <alice@ex.com>"},
-        "fournisseur": {"status": "uncertain", "value": null, "reason": "Unable to read vendor name"}
+        "fournisseur": {"status": "uncertain", "value": null, "reason": "Unable to read vendor name"},
+        "groupingEvidence": [
+          {"attachmentId": "a1", "provider": "Merchant", "service": "Subscription", "documentKind": "invoice", "reason": "Invoice heading"},
+          {"attachmentId": "a2", "provider": "Merchant", "service": "Subscription", "documentKind": "payment proof", "reason": "Payment confirmation"}
+        ]
       }]
     }`);
 
@@ -122,6 +127,10 @@ describe('classification parsing', () => {
     });
     expect(parsed.receiptGroups[0]?.fieldStatuses?.soumisPar?.status).toBe('confident');
     expect(parsed.receiptGroups[0]?.fournisseur).toBeNull();
+    expect(parsed.receiptGroups[0]?.groupingEvidence).toEqual([
+      { attachmentId: 'a1', provider: 'Merchant', service: 'Subscription', documentKind: 'invoice', reason: 'Invoice heading' },
+      { attachmentId: 'a2', provider: 'Merchant', service: 'Subscription', documentKind: 'payment_proof', reason: 'Payment confirmation' },
+    ]);
   });
 });
 

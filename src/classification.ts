@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { MONDAY_INVOICE_TYPES } from './config.js';
 import {
   PROVENANCE_SUGGESTIONS,
+  type AttachmentDocumentKind,
   type ClassificationFieldStatus,
   type ClassifiedField,
   type InvoiceType,
@@ -98,6 +99,22 @@ const fieldEnvelope = <T extends z.ZodTypeAny>(valueSchema: T) =>
       }
     });
 
+const attachmentDocumentKind = z.preprocess((value) => {
+  if (typeof value !== 'string') return value;
+  const normalized = value.trim().toLowerCase().replace(/[ -]/g, '_');
+  if (normalized === 'proof_of_payment' || normalized === 'payment_confirmation') return 'payment_proof';
+  if (normalized === 'support' || normalized === 'supporting') return 'supporting_document';
+  return normalized;
+}, z.enum(['invoice', 'receipt', 'payment_proof', 'supporting_document', 'other']));
+
+const groupingEvidenceSchema = z.object({
+  attachmentId: z.string().trim().min(1),
+  provider: nullableTrimmedStringRequired,
+  service: nullableTrimmedStringRequired,
+  documentKind: attachmentDocumentKind,
+  reason: statusReason,
+});
+
 const legacyReceiptGroupSchema = z.object({
   itemName: z.string().trim().min(1),
   confidence: z.number().min(0).max(1),
@@ -108,6 +125,7 @@ const legacyReceiptGroupSchema = z.object({
   datePaiement: nullableIsoDate,
   typeDeFacture: invoiceType,
   notesParticulieres: z.string().trim().min(1),
+  groupingEvidence: z.array(groupingEvidenceSchema).optional(),
 });
 
 type LegacyReceiptGroupInput = z.infer<typeof legacyReceiptGroupSchema>;
@@ -129,6 +147,7 @@ const enrichedReceiptGroupSchema = z.object({
   provenanceSuggeree: fieldEnvelope(nullableProvenanceSuggestion),
   soumisPar: fieldEnvelope(nullableTrimmedStringRequired),
   fournisseur: fieldEnvelope(nullableTrimmedStringRequired),
+  groupingEvidence: z.array(groupingEvidenceSchema).optional(),
 });
 
 export const receiptGroupSchema = z
@@ -211,6 +230,7 @@ function normalizeEnrichedReceiptGroup(raw: z.infer<typeof enrichedReceiptGroupS
     soumisPar: soumisPar.value,
     provenanceSuggeree: provenanceSuggeree.value,
     fournisseur: fournisseur.value,
+    groupingEvidence: normalizeGroupingEvidence(raw.groupingEvidence),
     fieldStatuses,
   };
 }
@@ -237,8 +257,25 @@ function normalizeLegacyReceiptGroup(raw: z.infer<typeof legacyReceiptGroupSchem
     datePaiement: raw.datePaiement,
     typeDeFacture: raw.typeDeFacture,
     notesParticulieres: raw.notesParticulieres,
+    groupingEvidence: normalizeGroupingEvidence(raw.groupingEvidence),
     fieldStatuses,
   };
+}
+
+function normalizeGroupingEvidence(
+  raw: Array<{ attachmentId: string; provider: string | null; service: string | null; documentKind: AttachmentDocumentKind; reason?: string | null }> | undefined,
+): ReceiptGroup['groupingEvidence'] {
+  if (!raw) {
+    return undefined;
+  }
+
+  return raw.map((evidence) => ({
+    attachmentId: evidence.attachmentId,
+    provider: evidence.provider,
+    service: evidence.service,
+    documentKind: evidence.documentKind,
+    reason: normalizeReason(evidence.reason),
+  }));
 }
 
 function normalizeRequiredField<T>(

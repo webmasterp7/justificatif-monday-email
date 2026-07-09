@@ -2,6 +2,16 @@ export type InvoiceType = 'Factures' | 'Carte';
 
 export type ClassificationFieldStatus = 'confident' | 'uncertain' | 'missing';
 
+export type AttachmentDocumentKind = 'invoice' | 'receipt' | 'payment_proof' | 'supporting_document' | 'other';
+
+export interface AttachmentGroupingEvidence {
+  attachmentId: string;
+  provider: string | null;
+  service: string | null;
+  documentKind: AttachmentDocumentKind;
+  reason?: string;
+}
+
 export const PROVENANCE_SUGGESTIONS = [
   'Direction',
   'Préverenges',
@@ -87,6 +97,7 @@ export interface ReceiptGroup {
   soumisPar?: string | null;
   provenanceSuggeree?: ProvenanceSuggestion | null;
   fournisseur?: string | null;
+  groupingEvidence?: AttachmentGroupingEvidence[];
 
   fieldStatuses?: ReceiptGroupFieldStatuses;
 }

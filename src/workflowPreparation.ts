@@ -1,5 +1,7 @@
 import type {
   AcceptedAttachment,
+  AttachmentDocumentKind,
+  AttachmentGroupingEvidence,
   ClassificationFieldStatus,
   ClassificationResult,
   EmailAttachment,
@@ -81,18 +83,27 @@ export function buildPreparedReceiptGroups(
   }
 
   const globalReasons = context.groupingReasons.filter((reason) => reason.startsWith('Confiance globale'));
-  const preparedGroups = classification.receiptGroups.map((group) => {
+  const attachmentsById = new Map(context.acceptedAttachments.map((attachment) => [attachment.id, attachment]));
+  const preparedGroups = classification.receiptGroups.flatMap((group) => {
+    const groupingValidation = validateStrictGrouping(group);
+
+    if (!groupingValidation.valid) {
+      return splitInvalidGroup(group, attachmentsById, groupingValidation.reason, globalReasons, context.unsupportedReasons);
+    }
+
     const reasons = uniqueReasons([
       ...globalReasons,
       ...consolidateGroupReasons(group, threshold),
       ...context.unsupportedReasons,
     ]);
 
-    return {
-      group,
-      statut: reasons.length > 0 ? ('Attention' as const) : ('Nouveau' as const),
-      attentionReasons: reasons,
-    } satisfies PreparedGroup;
+    return [
+      {
+        group,
+        statut: reasons.length > 0 ? ('Attention' as const) : ('Nouveau' as const),
+        attentionReasons: reasons,
+      } satisfies PreparedGroup,
+    ];
   });
 
   if (assignment.unassignedAttachments.length > 0) {
@@ -217,6 +228,83 @@ function buildUnassignedAttentionGroup(
     typeDeFacture: 'Factures',
     notesParticulieres: `Pièces jointes acceptées à vérifier et assigner manuellement: ${attachments.map((attachment) => attachment.name).join(', ')}`,
   };
+}
+
+function validateStrictGrouping(group: ReceiptGroup): { valid: true } | { valid: false; reason: string } {
+  if (group.attachmentIds.length <= 1) {
+    return { valid: true };
+  }
+
+  const evidenceByAttachmentId = new Map(group.groupingEvidence?.map((evidence) => [evidence.attachmentId, evidence]));
+  const evidence = group.attachmentIds.map((attachmentId) => evidenceByAttachmentId.get(attachmentId));
+
+  if (evidence.some((entry) => !entry)) {
+    return { valid: false, reason: 'preuve de regroupement manquante pour une ou plusieurs pièces jointes' };
+  }
+
+  const providerKeys = new Set(evidence.map((entry) => normalizeGroupingKey(entry?.provider)));
+  if (providerKeys.has(null) || providerKeys.size !== 1) {
+    return { valid: false, reason: 'fournisseurs différents ou manquants' };
+  }
+
+  const serviceKeys = new Set(evidence.map((entry) => normalizeGroupingKey(entry?.service)));
+  if (serviceKeys.has(null) || serviceKeys.size !== 1) {
+    return { valid: false, reason: 'services différents ou manquants' };
+  }
+
+  const documentKinds = evidence.map((entry) => entry?.documentKind).filter((kind): kind is AttachmentDocumentKind => Boolean(kind));
+  if (documentKinds.length !== new Set(documentKinds).size) {
+    return { valid: false, reason: 'plusieurs pièces jointes ont le même type de document' };
+  }
+
+  return { valid: true };
+}
+
+function splitInvalidGroup(
+  group: ReceiptGroup,
+  attachmentsById: Map<string, AcceptedAttachment>,
+  reason: string,
+  globalReasons: string[],
+  unsupportedReasons: string[],
+): PreparedGroup[] {
+  return group.attachmentIds.map((attachmentId) => {
+    const attachment = attachmentsById.get(attachmentId);
+    const itemName = attachment ? `À vérifier - ${stripFileExtension(attachment.name)}` : `${group.itemName} - ${attachmentId}`;
+    const attentionReason = `Regroupement invalide: ${reason}`;
+
+    return {
+      group: {
+        itemName,
+        confidence: Math.min(group.confidence, 0.5),
+        groupingExplanation: `Groupe scindé automatiquement: ${reason}`,
+        attachmentIds: [attachmentId],
+        referenceFacture: null,
+        montantFacture: null,
+        datePaiement: null,
+        typeDeFacture: group.typeDeFacture,
+        notesParticulieres: `Pièce jointe isolée depuis le groupe "${group.itemName}". ${attentionReason}.`,
+        soumisPar: group.soumisPar,
+        provenanceSuggeree: group.provenanceSuggeree,
+        fournisseur: group.groupingEvidence?.find((evidence) => evidence.attachmentId === attachmentId)?.provider ?? group.fournisseur,
+        groupingEvidence: group.groupingEvidence?.filter((evidence) => evidence.attachmentId === attachmentId),
+      },
+      statut: 'Attention' as const,
+      attentionReasons: uniqueReasons([attentionReason, ...globalReasons, ...unsupportedReasons]),
+    } satisfies PreparedGroup;
+  });
+}
+
+function normalizeGroupingKey(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return normalized.length > 0 ? normalized : null;
+}
+
+function stripFileExtension(fileName: string): string {
+  return fileName.replace(/\.[^.]+$/, '');
 }
 
 function buildConsolidatedAttentionGroup(
