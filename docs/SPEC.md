@@ -136,6 +136,10 @@ It must return JSON matching this shape:
 }
 ```
 
+Generation uses Mistral `json_schema` with `strict: true` for the enriched contract in `src/clients/mistral.ts`: root `decision`, `confidence`, `reviewReason`, `emailSummary`, and `receiptGroups`; each group has `confidence`, non-empty `attachmentIds`, `groupingEvidence`, and the ten `{status, value, reason}` field envelopes. Every object requires all properties and disallows extra properties. Missing values use null; absent evidence uses an empty array. Text fields remain nullable strings, amounts nullable numbers, and invoice type `Factures`, `Carte`, or null. Each evidence entry is an object with `attachmentId`, nullable `provider`/`service`/`reason`, and `documentKind`.
+
+`parseClassificationJson` remains the runtime authority for dates, normalization, and uncertain/missing reasons; legacy parsing remains supported. Invalid generated responses still route to Review without coercing or dropping evidence. Structured output constrains shape, not semantic invoice accuracy. The configured chat model must support this strict schema; there is no fallback to unconstrained JSON.
+
 Validation rules:
 
 - `decision=review` always routes to Error/Review.
@@ -201,7 +205,7 @@ If a status column is later added to the board, the implementation should suppor
 ## Email routing
 
 - Normal successful processing: create item initially as `Attention`, upload `Facture` files, move source email to `Processed`, post the final monday summary update with the source-email link, post a dedicated attention update when reasons exist, then promote to `Nouveau` only when no attention reasons remain.
-- Review/error processing: create an `Attention` item, then move source email to `Review`, then post the final monday update with the source-email link and `Attention` reasons.
+- Review/error processing: create one `Attention` item, upload supported non-inline PDF/image files to its `Facture` column, then move source email to `Review`, then post the final monday update with the source-email link and `Attention` reasons. This applies to classifier-requested review, invoice-type conflicts, and processing exceptions (including invalid classification and OCR failure). Reuse successfully downloaded bytes, including when attachment metadata reload fails; download remaining supported candidates with the existing transient-timeout policy. Transfer files sequentially; a per-file download/upload failure is logged and added to the final update with the filename while remaining files and the Review move continue. Transfer failures alone never create a second review item. Empty supported sets retain the reason/context update without file operations.
 - If monday item creation succeeds but file upload fails: retry uploads first. If retries are exhausted, add an update to the created item if possible, create/log the Error/Review path, and move the email to `Review`.
 - If final update posting fails after move, retry with backoff, keep the item in `Attention`, and emit structured logs for manual follow-up.
 - Microsoft Graph requests use `Prefer: IdType="ImmutableId"` for stable API operations after moves. For human Outlook links, the moved message `webLink` `ItemID` is used first and rendered as a mailbox-scoped Outlook Web deeplink; ID translation is only a fallback when the moved link has no parseable `ItemID`.

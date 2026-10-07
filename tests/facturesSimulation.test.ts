@@ -552,7 +552,10 @@ describe('Factures workflow deterministic simulation scenarios', () => {
         itemName: email.subject,
       }),
     );
-    expect(monday.uploadFile).not.toHaveBeenCalled();
+    expect(monday.uploadFile).toHaveBeenCalledExactlyOnceWith({
+      itemId: 'item-1', fileName: attachment.name, contentType: attachment.contentType,
+      bytes: Buffer.from(attachment.contentBytes, 'base64'),
+    });
     expect(monday.updateItemStatus).not.toHaveBeenCalled();
     expect(monday.createUpdate).toHaveBeenCalledTimes(1);
   });
@@ -575,7 +578,10 @@ describe('Factures workflow deterministic simulation scenarios', () => {
         itemName: email.subject,
       }),
     );
-    expect(monday.uploadFile).not.toHaveBeenCalled();
+    expect(monday.uploadFile).toHaveBeenCalledExactlyOnceWith({
+      itemId: 'item-1', fileName: attachment.name, contentType: attachment.contentType,
+      bytes: Buffer.from(attachment.contentBytes, 'base64'),
+    });
     expect(monday.createUpdate).toHaveBeenCalledTimes(1);
     expect(monday.updateItemStatus).not.toHaveBeenCalled();
   });
@@ -604,7 +610,7 @@ describe('Factures workflow deterministic simulation scenarios', () => {
 
     const { graph, monday } = await processFixture(fixture, { uploadRejects: true });
 
-    expect(monday.uploadFile).toHaveBeenCalledTimes(1);
+    expect(monday.uploadFile).toHaveBeenCalledTimes(2);
     expect(graph.moveMessage).toHaveBeenCalledWith(email.id, 'review-folder');
     expect(monday.createItem).toHaveBeenCalledTimes(2);
     expect(monday.createItem.mock.calls[0]![0]).not.toHaveProperty('itemName', email.subject);

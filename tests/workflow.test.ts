@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ClassificationParseError } from '../src/classification.js';
+import { ClassificationParseError, parseClassificationJson } from '../src/classification.js';
+import { malformedEvidenceFixture } from './helpers/enrichedClassificationFixture.js';
 import type { AppConfig } from '../src/config.js';
 import type { GraphMailClient } from '../src/clients/graph.js';
 import type { MistralReceiptClient } from '../src/clients/mistral.js';
@@ -202,6 +203,89 @@ function makeTimeoutError(): Error {
 }
 
 describe('ReceiptWorkflow', () => {
+  it.each(['classifier', 'invoice-type', 'ocr', 'metadata-reload'] as const)(
+    'uploads cached PDF without redownload for %s review',
+    async (cause) => {
+      const mocks = makeMocks({
+        classificationDecision: cause === 'classifier' ? 'review' : 'create_items',
+        ocrMarkdown: cause === 'invoice-type' ? 'Paid by Visa card. QR-facture IBAN CH123 bank transfer.' : undefined,
+      });
+      if (cause === 'ocr' || cause === 'metadata-reload') {
+        mocks.mistral.ocrAttachment.mockRejectedValue(new Error('OCR failed'));
+      }
+      if (cause === 'metadata-reload') {
+        mocks.graph.listAttachments.mockResolvedValueOnce([attachment]).mockRejectedValue(new Error('metadata unavailable'));
+      }
+      await makeWorkflow(mocks).processMessage(email, { processedFolderId: 'processed-folder', reviewFolderId: 'review-folder' });
+      expect(mocks.graph.getAcceptedAttachment).toHaveBeenCalledExactlyOnceWith(email.id, attachment.id);
+      expect(mocks.monday.createItem).toHaveBeenCalledTimes(1);
+      expect(mocks.monday.uploadFile).toHaveBeenCalledExactlyOnceWith({
+        itemId: 'item-1', fileName: attachment.name, contentType: attachment.contentType,
+        bytes: Buffer.from('bytes-attachment-1'),
+      });
+      expect(mocks.graph.moveMessage).toHaveBeenCalledWith(email.id, 'review-folder');
+    },
+  );
+
+  it.each(['download', 'upload'] as const)('continues review after first file %s fails', async (failure) => {
+    const second = { ...attachment, id: 'attachment-2', name: 'second.pdf' };
+    const mocks = makeMocks({ attachments: [attachment, second], classificationDecision: 'review', reviewReason: 'Original review reason' });
+    if (failure === 'download') {
+      mocks.graph.getAcceptedAttachment.mockImplementation(async (_messageId, id) => {
+        if (id === attachment.id) throw new Error('first download failed');
+        return { ...second, contentBytes: Buffer.from('second bytes').toString('base64') };
+      });
+    } else {
+      mocks.monday.uploadFile.mockRejectedValueOnce(new Error('first upload failed'));
+    }
+    await makeWorkflow(mocks).processMessage(email, { processedFolderId: 'processed-folder', reviewFolderId: 'review-folder' });
+    expect(mocks.monday.createItem).toHaveBeenCalledTimes(1);
+    expect(mocks.monday.uploadFile).toHaveBeenCalledWith({
+      itemId: 'item-1', fileName: second.name, contentType: second.contentType,
+      bytes: Buffer.from(failure === 'download' ? 'second bytes' : 'bytes-attachment-2'),
+    });
+    expect(mocks.graph.moveMessage).toHaveBeenCalledWith(email.id, 'review-folder');
+    const body = mocks.monday.createUpdate.mock.calls[0]?.[0].body;
+    expect(body).toContain(failure === 'upload' ? 'Original review reason' : 'first download failed');
+    expect(body).toContain(`Échec du chargement du fichier «${attachment.name}»`);
+  });
+
+  it.each([{ attachments: [] }, { attachments: [
+    { ...attachment, id: 'inline', isInline: true },
+    { ...attachment, id: 'unsupported', name: 'notes.docx', contentType: 'application/msword' },
+  ] }])('does not transfer unsupported or empty review attachment sets', async ({ attachments }) => {
+    const mocks = makeMocks({ attachments });
+    mocks.graph.listAttachments.mockRejectedValueOnce(new Error('initial metadata failed'));
+    await makeWorkflow(mocks).processMessage(email, { processedFolderId: 'processed-folder', reviewFolderId: 'review-folder' });
+    expect(mocks.monday.createItem).toHaveBeenCalledTimes(1);
+    expect(mocks.graph.getAcceptedAttachment).not.toHaveBeenCalled();
+    expect(mocks.monday.uploadFile).not.toHaveBeenCalled();
+    expect(mocks.graph.moveMessage).toHaveBeenCalledWith(email.id, 'review-folder');
+    expect(mocks.monday.createUpdate.mock.calls[0]?.[0].body).toContain('Erreur technique pendant le traitement automatique');
+  });
+
+  it('retains the original PDF on one review item when enriched evidence is malformed', async () => {
+    const mocks = makeMocks();
+    mocks.mistral.classifyReceipts.mockImplementation(async () =>
+      parseClassificationJson(JSON.stringify(malformedEvidenceFixture)),
+    );
+
+    await makeWorkflow(mocks).processMessage(email, { processedFolderId: 'processed-folder', reviewFolderId: 'review-folder' });
+
+    expect(mocks.monday.createItem).toHaveBeenCalledTimes(1);
+    expect(mocks.monday.createItem).toHaveBeenCalledWith(expect.objectContaining({
+      columnValues: expect.objectContaining({ statut: 'Attention' }),
+    }));
+    expect(mocks.graph.moveMessage).toHaveBeenCalledWith(email.id, 'review-folder');
+    expect(mocks.monday.createUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      body: expect.stringContaining('réponse du classificateur'),
+    }));
+    expect(mocks.monday.uploadFile).toHaveBeenCalledExactlyOnceWith({
+      itemId: 'item-1', fileName: attachment.name, contentType: attachment.contentType,
+      bytes: Buffer.from('bytes-attachment-1'),
+    });
+  });
+
   it('creates a clean item as Attention, then promotes it to Nouveau after upload, move, and update', async () => {
     const mocks = makeMocks();
     const workflow = makeWorkflow(mocks);

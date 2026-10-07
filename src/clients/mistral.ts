@@ -3,6 +3,72 @@ import { MONDAY_PROVENANCE_LABELS } from '../config.js';
 import { parseClassificationJson } from '../classification.js';
 import type { AcceptedAttachment, ClassificationResult, EmailMessage, OcrDocument } from '../types.js';
 
+const nullableTextSchema = { type: ['string', 'null'] };
+const fieldEnvelopeSchema = (value: Record<string, unknown>) => ({
+  type: 'object',
+  additionalProperties: false,
+  required: ['status', 'value', 'reason'],
+  properties: {
+    status: { type: 'string', enum: ['confident', 'uncertain', 'missing'] },
+    value,
+    reason: nullableTextSchema,
+  },
+});
+const textFieldSchema = fieldEnvelopeSchema(nullableTextSchema);
+const confidenceSchema = { type: 'number', minimum: 0, maximum: 1 };
+const classificationResponseJsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['decision', 'confidence', 'reviewReason', 'emailSummary', 'receiptGroups'],
+  properties: {
+    decision: { type: 'string', enum: ['create_items', 'review'] },
+    confidence: confidenceSchema,
+    reviewReason: nullableTextSchema,
+    emailSummary: { type: 'string' },
+    receiptGroups: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: [
+          'confidence', 'attachmentIds', 'groupingEvidence', 'itemName', 'groupingExplanation',
+          'referenceFacture', 'montantFacture', 'datePaiement', 'typeDeFacture',
+          'notesParticulieres', 'provenanceSuggeree', 'soumisPar', 'fournisseur',
+        ],
+        properties: {
+          confidence: confidenceSchema,
+          attachmentIds: { type: 'array', minItems: 1, items: { type: 'string' } },
+          groupingEvidence: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['attachmentId', 'provider', 'service', 'documentKind', 'reason'],
+              properties: {
+                attachmentId: { type: 'string' },
+                provider: nullableTextSchema,
+                service: nullableTextSchema,
+                documentKind: { type: 'string', enum: ['invoice', 'receipt', 'payment_proof', 'supporting_document', 'other'] },
+                reason: nullableTextSchema,
+              },
+            },
+          },
+          itemName: textFieldSchema,
+          groupingExplanation: textFieldSchema,
+          referenceFacture: textFieldSchema,
+          montantFacture: fieldEnvelopeSchema({ type: ['number', 'null'] }),
+          datePaiement: textFieldSchema,
+          typeDeFacture: fieldEnvelopeSchema({ type: ['string', 'null'], enum: ['Factures', 'Carte', null] }),
+          notesParticulieres: textFieldSchema,
+          provenanceSuggeree: textFieldSchema,
+          soumisPar: textFieldSchema,
+          fournisseur: textFieldSchema,
+        },
+      },
+    },
+  },
+};
+
 export interface MistralClientConfig {
   apiKey: string;
   ocrModel: string;
@@ -47,7 +113,10 @@ export class MistralReceiptClient {
     const prompt = buildClassificationPrompt(input);
     const response = await this.client.chat.complete({
       model: this.config.chatModel,
-      responseFormat: { type: 'json_object' },
+      responseFormat: {
+        type: 'json_schema',
+        jsonSchema: { name: 'receipt_classification', strict: true, schemaDefinition: classificationResponseJsonSchema },
+      },
       messages: [
         {
           role: 'system',

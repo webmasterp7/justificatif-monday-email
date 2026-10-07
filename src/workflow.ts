@@ -56,6 +56,7 @@ export class ReceiptWorkflow {
   ): Promise<void> {
     this.logger.debug('Processing email message', messageLogContext(message));
 
+    const downloadedAttachments: AcceptedAttachment[] = [];
     try {
       const attachments = await this.graph.listAttachments(message.id);
       const filterResult = filterReceiptAttachments(attachments, this.config.workflow);
@@ -76,15 +77,17 @@ export class ReceiptWorkflow {
       }
 
       const accepted = await Promise.all(
-        acceptedAttachments.map((attachment) =>
-          retryTransientTimeout({
+        acceptedAttachments.map(async (attachment) => {
+          const downloaded = await retryTransientTimeout({
             step: `Microsoft Graph attachment download (${attachment.name})`,
             maxAttempts: this.config.workflow.uploadRetryAttempts,
             baseDelayMs: this.config.workflow.uploadRetryDelayMs,
             logger: this.logger,
             operation: () => this.graph.getAcceptedAttachment(message.id, attachment.id),
-          }),
-        ),
+          });
+          downloadedAttachments.push(downloaded);
+          return downloaded;
+        }),
       );
 
       const ocrDocuments = await Promise.all(
@@ -119,6 +122,9 @@ export class ReceiptWorkflow {
           attachments,
           classification.reviewReason ?? 'Classifier requested review',
           folders.reviewFolderId,
+          [],
+          undefined,
+          downloadedAttachments,
         );
         return;
       }
@@ -130,7 +136,7 @@ export class ReceiptWorkflow {
       });
 
       if (invoiceTypeEvidence.reviewReason) {
-        await this.routeToReview(message, attachments, invoiceTypeEvidence.reviewReason, folders.reviewFolderId);
+        await this.routeToReview(message, attachments, invoiceTypeEvidence.reviewReason, folders.reviewFolderId, [], undefined, downloadedAttachments);
         return;
       }
 
@@ -163,7 +169,7 @@ export class ReceiptWorkflow {
       });
 
       const attachments = await this.safeListAttachments(message.id);
-      await this.routeToReview(message, attachments, reviewReason, folders.reviewFolderId, [], technicalReason);
+      await this.routeToReview(message, attachments, reviewReason, folders.reviewFolderId, [], technicalReason, downloadedAttachments);
     }
   }
 
@@ -374,6 +380,7 @@ export class ReceiptWorkflow {
     reviewFolderId: string,
     attentionReasons: string[] = [],
     technicalReason?: string,
+    downloadedAttachments: AcceptedAttachment[] = [],
   ): Promise<void> {
     const item = await this.monday.createItem({
       itemName: message.subject || message.id,
@@ -386,6 +393,36 @@ export class ReceiptWorkflow {
         etatDeFacture: 'Facture Reçue',
       },
     });
+
+    const cachedById = new Map(downloadedAttachments.map((attachment) => [attachment.id, attachment]));
+    const candidates = new Map(
+      filterReceiptAttachments(attachments, this.config.workflow).accepted.map((attachment) => [attachment.id, attachment]),
+    );
+    for (const attachment of downloadedAttachments) {
+      if (!candidates.has(attachment.id)) candidates.set(attachment.id, attachment);
+    }
+    const reviewAttentionReasons = [...attentionReasons];
+    for (const candidate of candidates.values()) {
+      try {
+        const attachment = cachedById.get(candidate.id) ?? await retryTransientTimeout({
+          step: `Microsoft Graph attachment download (${candidate.name})`,
+          maxAttempts: this.config.workflow.uploadRetryAttempts,
+          baseDelayMs: this.config.workflow.uploadRetryDelayMs,
+          logger: this.logger,
+          operation: () => this.graph.getAcceptedAttachment(message.id, candidate.id),
+        });
+        await this.uploadAttachmentsWithRetries(item.id, [attachment]);
+      } catch (error) {
+        const errorReason = formatTechnicalError(error);
+        reviewAttentionReasons.push(`Échec du chargement du fichier «${candidate.name}» sur l’item de revue: ${errorReason}`);
+        this.logger.error('Review attachment upload failed', {
+          itemId: item.id,
+          attachmentId: candidate.id,
+          fileName: candidate.name,
+          errorReason,
+        });
+      }
+    }
 
     let movedMessage = message;
     try {
@@ -405,7 +442,7 @@ export class ReceiptWorkflow {
         reason,
         attachmentNames: attachments.map((attachment) => attachment.name),
         emailThread: message.bodyText,
-        attentionReasons,
+        attentionReasons: reviewAttentionReasons,
         movedMessageLink: movedMessage.webLink,
       }),
     );

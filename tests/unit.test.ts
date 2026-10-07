@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { filterReceiptAttachments } from '../src/attachments.js';
 import { loadConfig, MONDAY_COLUMNS } from '../src/config.js';
-import { parseClassificationJson } from '../src/classification.js';
+import { ClassificationParseError, parseClassificationJson } from '../src/classification.js';
+import { enrichedClassificationFixture, malformedEvidenceFixture } from './helpers/enrichedClassificationFixture.js';
 import { MondayClient } from '../src/clients/monday.js';
 import { GraphMailClient, toEmailMessage } from '../src/clients/graph.js';
 import {
@@ -65,6 +66,20 @@ describe('attachment filtering', () => {
 });
 
 describe('classification parsing', () => {
+  it('preserves enriched invoice fields and object evidence', () => {
+    const result = parseClassificationJson(JSON.stringify(enrichedClassificationFixture));
+    expect(result.receiptGroups[0]).toMatchObject({
+      referenceFacture: 'SYNTH-2026-09',
+      montantFacture: 42.5,
+      attachmentIds: ['attachment-1'],
+      groupingEvidence: [{ attachmentId: 'attachment-1', provider: 'Swisscom', service: 'Téléphonie', documentKind: 'invoice' }],
+    });
+  });
+
+  it('rejects an entire numeric evidence entry without coercion', () => {
+    expect(() => parseClassificationJson(JSON.stringify(malformedEvidenceFixture))).toThrow(ClassificationParseError);
+  });
+
   it('normalizes legacy date, amount, and dropdown values', () => {
     const parsed = parseClassificationJson(`{
       "decision": "create_items",
